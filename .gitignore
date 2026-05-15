@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 클로드 관련
+CLAUDE.md
+handoff/
+spec/
