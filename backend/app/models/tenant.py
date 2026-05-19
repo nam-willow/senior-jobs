@@ -1,4 +1,6 @@
+from __future__ import annotations
 import uuid
+from typing import Optional
 
 from sqlalchemy import Boolean, String
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,7 +17,7 @@ class Tenant(Base):
     )
     tenant_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    business_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    business_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     subscription_plan: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="basic"
     )

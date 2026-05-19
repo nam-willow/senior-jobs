@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing_extensions import Annotated
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Request, status

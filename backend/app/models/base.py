@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 공통 Mixin 및 SQLAlchemy 2.0 Soft Delete 자동 필터.
 
@@ -9,8 +10,9 @@ SoftDeleteMixin 상속 테이블:
 """
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, event, func
+from sqlalchemy import DateTime, ForeignKey, event, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, Session, mapped_column, with_loader_criteria
 
@@ -25,7 +27,7 @@ class TimestampMixin:
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,
@@ -35,14 +37,14 @@ class TimestampMixin:
 # ── SoftDeleteMixin ────────────────────────────────────────────────────────────
 
 class SoftDeleteMixin:
-    deleted_at: Mapped[datetime | None] = mapped_column(
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         default=None,
     )
-    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+    deleted_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", use_alter=True),
+        ForeignKey("users.id"),
         nullable=True,
         default=None,
     )

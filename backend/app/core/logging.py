@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 structlog 기반 구조화 JSON 로깅.
 모든 로그에 trace_id(X-Request-ID), tenant_id, user_id 자동 바인딩.
@@ -18,6 +19,8 @@ _REQUEST_ID_HEADER = "X-Request-ID"
 def setup_logging() -> None:
     log_level = logging.DEBUG if settings.debug else logging.INFO
 
+    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=log_level)
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -30,11 +33,10 @@ def setup_logging() -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(sys.stdout),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
-    # uvicorn / sqlalchemy 로거도 structlog 수준에 맞게 조정
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "sqlalchemy.engine"):
         logging.getLogger(name).setLevel(log_level)
 

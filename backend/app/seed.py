@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 개발/테스트용 초기 데이터 삽입.
 운영 환경에서는 절대 실행 금지.

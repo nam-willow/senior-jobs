@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -112,7 +114,7 @@ async def revoke_all_user_tokens(redis: aioredis.Redis, user_id: str) -> None:
 
 async def get_user_id_by_refresh_jti(
     redis: aioredis.Redis, jti: str
-) -> str | None:
+) -> Optional[str]:
     """Redis에 jti가 없으면 None (만료 또는 재사용 시도)."""
     value = await redis.get(_rt_key(jti))
     if value is None:

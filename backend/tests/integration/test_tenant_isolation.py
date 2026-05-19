@@ -43,8 +43,9 @@ async def test_tenant_isolation_cross_access(db, two_tenants):
     """
     tenant_a_id, tenant_b_id, user_a, user_b = two_tenants
 
-    # A 기관 컨텍스트로 전환
+    # A 기관 컨텍스트로 전환 (app_role: 비특권 역할, 슈퍼유저의 RLS 우회 방지)
     await db.execute(text(f"SET LOCAL app.current_tenant = '{tenant_a_id}'"))
+    await db.execute(text("SET LOCAL ROLE app_role"))
 
     result = await db.execute(select(User))
     visible_users = result.scalars().all()

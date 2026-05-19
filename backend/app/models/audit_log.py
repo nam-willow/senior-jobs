@@ -1,5 +1,7 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -23,14 +25,13 @@ class AuditLog(Base):
         nullable=False,
         index=True,
     )
-    # CREATE / UPDATE / DELETE / LOGIN / LOGOUT / EXPORT
     action_type: Mapped[str] = mapped_column(String(50), nullable=False)
     target_table: Mapped[str] = mapped_column(String(100), nullable=False)
-    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    before_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    after_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    target_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    before_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    after_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     ip_address: Mapped[str] = mapped_column(String(50), nullable=False)
-    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

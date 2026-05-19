@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 import redis.asyncio as aioredis
@@ -41,7 +42,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # ── Redis ─────────────────────────────────────────────────────────────────────
 
-_redis_pool: aioredis.Redis | None = None
+_redis_pool: Optional[aioredis.Redis] = None
 
 
 async def get_redis() -> aioredis.Redis:

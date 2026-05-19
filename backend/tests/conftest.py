@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 pytest fixtures — 인메모리 SQLite 대신 실제 asyncpg 사용.
 테스트 DB: senior_jobs_test (docker-compose postgres 컨테이너 재사용)
@@ -13,20 +14,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.core.database import Base, get_db, get_redis
 from app.core.security import hash_password
-from app.models.tenant import Tenant  # noqa: F401 — Base.metadata 등록용
+from app.models.audit_log import AuditLog  # noqa: F401 — Base.metadata 등록용
+from app.models.tenant import Tenant  # noqa: F401
 from app.models.user import User, UserRole
 
 # ── 테스트 DB URL ─────────────────────────────────────────────────────────────
-TEST_DB_URL = settings.database_url.replace(
-    f"/{settings.database_url.rsplit('/', 1)[-1]}",
-    "/senior_jobs_test",
-)
+TEST_DB_URL = settings.database_url.rsplit("/", 1)[0] + "/senior_jobs_test"
 
-test_engine = create_async_engine(TEST_DB_URL, echo=False)
+# NullPool: 각 픽스처가 독립 커넥션을 받아 pool dirty-state 문제를 방지
+test_engine = create_async_engine(TEST_DB_URL, echo=False, poolclass=NullPool)
 TestSessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
 
 
@@ -41,12 +42,40 @@ def event_loop():
 async def create_tables():
     async with test_engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
+        await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
         await conn.run_sync(Base.metadata.drop_all)
+        # drop_all removes tables but not ENUM types — recreate them
+        for enum_name in ("userrole",):
+            await conn.execute(text(f"DROP TYPE IF EXISTS {enum_name} CASCADE"))
+        await conn.execute(text(
+            "CREATE TYPE userrole AS ENUM "
+            "('platform_admin','tenant_admin','social_worker','approver','auditor','viewer')"
+        ))
         await conn.run_sync(Base.metadata.create_all)
+        # create non-privileged role for RLS integration tests
+        # (superusers bypass RLS even with FORCE; app_role does not)
+        await conn.execute(text(
+            "DO $$ BEGIN CREATE ROLE app_role; "
+            "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+        ))
+        await conn.execute(text("GRANT SELECT ON users, tenants TO app_role"))
+        # create_all does not add RLS — apply tenant isolation policy manually
+        for table in ("tenants", "users", "audit_logs"):
+            await conn.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
+            await conn.execute(text(f"ALTER TABLE {table} FORCE  ROW LEVEL SECURITY"))
+            await conn.execute(text(
+                f"CREATE POLICY tenant_isolation ON {table} "
+                f"USING (current_setting('app.current_tenant', true) = 'ALL' "
+                f"OR tenant_id::text = current_setting('app.current_tenant', true))"
+                if table != "tenants" else
+                f"CREATE POLICY tenant_isolation ON {table} "
+                f"USING (current_setting('app.current_tenant', true) = 'ALL' "
+                f"OR id::text = current_setting('app.current_tenant', true))"
+            ))
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP TYPE IF EXISTS userrole CASCADE"))
 
 
 @pytest_asyncio.fixture

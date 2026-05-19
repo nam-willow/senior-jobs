@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 import uuid
 from datetime import datetime, timezone
 
@@ -31,7 +33,7 @@ async def login(
     email: str,
     password: str,
     ip_address: str,
-    user_agent: str | None = None,
+    user_agent: Optional[str] = None,
 ) -> TokenResponse:
     result = await db.execute(
         select(User).where(User.email == email, User.is_active.is_(True))
@@ -75,7 +77,7 @@ async def refresh(
     *,
     token: str,
     ip_address: str,
-    user_agent: str | None = None,
+    user_agent: Optional[str] = None,
 ) -> TokenResponse:
     try:
         user_id, old_jti = await verify_refresh_token(redis, token)
@@ -122,12 +124,12 @@ async def logout(
     current_user_id: str,
     current_tenant_id: str,
     ip_address: str,
-    user_agent: str | None = None,
+    user_agent: Optional[str] = None,
 ) -> None:
     try:
         payload = decode_token(refresh_token_str)
-        jti: str | None = payload.get("jti")
-        token_user_id: str | None = payload.get("sub")
+        jti: Optional[str] = payload.get("jti")
+        token_user_id: Optional[str] = payload.get("sub")
     except JWTError:
         # 만료된 토큰이어도 로그아웃은 성공으로 처리
         jti = None

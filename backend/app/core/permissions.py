@@ -1,5 +1,5 @@
-from enum import IntEnum
-from typing import Annotated
+from typing import Dict, List, Optional
+from typing_extensions import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,7 +19,7 @@ class Role(str):
 
 
 # 역할 계층 (높을수록 상위)
-_ROLE_LEVEL: dict[str, int] = {
+_ROLE_LEVEL: Dict[str, int] = {
     Role.PLATFORM_ADMIN: 100,
     Role.TENANT_ADMIN:    80,
     Role.SOCIAL_WORKER:   60,
@@ -37,7 +37,7 @@ def role_level(role: str) -> int:
 
 # ── 퍼미션 매트릭스 ───────────────────────────────────────────────────────────
 
-PERMISSION_MATRIX: dict[str, list[str]] = {
+PERMISSION_MATRIX: Dict[str, List[str]] = {
     "VIEW_SENIOR":        [Role.PLATFORM_ADMIN, Role.TENANT_ADMIN, Role.SOCIAL_WORKER, Role.APPROVER, Role.AUDITOR, Role.VIEWER],
     "EDIT_SENIOR":        [Role.PLATFORM_ADMIN, Role.TENANT_ADMIN, Role.SOCIAL_WORKER],
     "DELETE_SENIOR":      [Role.PLATFORM_ADMIN, Role.TENANT_ADMIN],
@@ -58,7 +58,7 @@ def has_permission(role: str, permission: str) -> bool:
 
 # ── 토큰 파싱 ─────────────────────────────────────────────────────────────────
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class CurrentUser:
@@ -74,13 +74,15 @@ class CurrentUser:
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer_scheme)],
 ) -> CurrentUser:
     exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if credentials is None:
+        raise exc
     try:
         payload = decode_token(credentials.credentials)
     except JWTError:
@@ -89,10 +91,10 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise exc
 
-    user_id: str | None = payload.get("sub")
-    tenant_id: str | None = payload.get("tenant_id")
-    role: str | None = payload.get("role")
-    jti: str | None = payload.get("jti")
+    user_id: Optional[str] = payload.get("sub")
+    tenant_id: Optional[str] = payload.get("tenant_id")
+    role: Optional[str] = payload.get("role")
+    jti: Optional[str] = payload.get("jti")
 
     if not all([user_id, tenant_id, role, jti]):
         raise exc

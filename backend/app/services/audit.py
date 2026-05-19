@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,10 +15,10 @@ async def record_audit(
     action_type: str,
     target_table: str,
     ip_address: str,
-    target_id: str | None = None,
-    before_data: dict | None = None,
-    after_data: dict | None = None,
-    user_agent: str | None = None,
+    target_id: Optional[str] = None,
+    before_data: Optional[dict] = None,
+    after_data: Optional[dict] = None,
+    user_agent: Optional[str] = None,
 ) -> None:
     db.add(AuditLog(
         tenant_id=uuid.UUID(tenant_id),

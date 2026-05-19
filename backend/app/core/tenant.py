@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 TenantMiddleware:
   JWT payload의 tenant_id를 추출 → DB 세션에
@@ -6,7 +7,7 @@ TenantMiddleware:
 platform_admin은 'ALL'을 주입하여 RLS 우회.
 """
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing_extensions import Annotated
 
 from fastapi import Depends
 from sqlalchemy import text

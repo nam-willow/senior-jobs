@@ -1,3 +1,4 @@
+from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,7 +11,8 @@ from slowapi.util import get_remote_address
 from app.core.config import settings
 from app.core.database import close_redis
 from app.core.logging import RequestLoggingMiddleware, setup_logging
-from app.routers import auth
+from app.models import audit_log, tenant, user  # noqa: F401 — Base.metadata 등록
+from app.routers import auth, seniors
 
 
 @asynccontextmanager
@@ -45,6 +47,7 @@ app.add_middleware(
 
 # ── 라우터 ────────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(seniors.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["health"])

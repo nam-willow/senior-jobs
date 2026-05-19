@@ -1,24 +1,24 @@
-import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import create_engine
 
 from app.core.config import settings
-from app.core.database import Base
 
-# 모든 모델을 여기서 import — Alembic autogenerate 대상 등록
-import app.models.tenant        # noqa: F401
-import app.models.user          # noqa: F401
-import app.models.audit_log     # noqa: F401
+# 명시적 SQL 마이그레이션 — 모델 import 금지
+# asyncpg는 multi-statement DDL을 prepared statement로 처리할 수 없으므로
+# 마이그레이션 실행 시에는 psycopg2(동기) 드라이버를 사용한다.
+target_metadata = None
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+
+sync_url = settings.database_url.replace(
+    "postgresql+asyncpg://", "postgresql+psycopg2://"
+)
+config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
-target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
@@ -33,21 +33,13 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-async def run_async_migrations() -> None:
-    engine = create_async_engine(settings.database_url)
-    async with engine.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-    await engine.dispose()
-
-
 def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
+    engine = create_engine(sync_url)
+    with engine.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+    engine.dispose()
 
 
 if context.is_offline_mode():
