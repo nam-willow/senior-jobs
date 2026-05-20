@@ -1,6 +1,8 @@
 import { useAppStore } from './stores/appStore';
+import { useAuthStore } from './stores/authStore';
 import type { PageType, TabType } from './types';
 import { AdminShell } from './components/layout/AdminShell';
+import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Seniors } from './pages/Seniors';
 import { Work } from './pages/Work';
@@ -12,6 +14,8 @@ import { Approvals } from './pages/Approvals';
 import { Alerts } from './pages/Alerts';
 
 function App() {
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  if (!isLoggedIn) return <Login />;
   const { page, tab, year, month, selectedSenior, focusSenior, set } = useAppStore();
 
   const navigate = (p: PageType, tabVal?: TabType, seniorId?: number) => {

@@ -1,5 +1,7 @@
+import { useAppStore } from '../stores/appStore';
+import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import type { PageType, TabType } from '../types';
-import { BUDGET, ALERTS, ORGS, MONTHLY, TABS, TAB_TONE, fmt, won } from '../data/mockData';
+import { ALERTS, ORGS, MONTHLY, TABS, TAB_TONE, fmt, won } from '../data/mockData';
 import { Card } from '../components/layout/Card';
 import { Chip } from '../components/shared/Chip';
 import { Donut } from '../components/shared/Donut';
@@ -8,12 +10,23 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
+const TYPE_KEY: Record<TabType, string> = {
+  '공익활동형': 'public_benefit',
+  '사회서비스형': 'social_service',
+  '시장형': 'market',
+};
+
 interface DashboardProps {
   onNavigate: (page: PageType, tab?: TabType) => void;
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const totalSeniors = Object.values(BUDGET).reduce((s, b) => s + b.count, 0);
+  const year = useAppStore((s) => s.year);
+  const { data: summary, loading } = useDashboardSummary(year);
+
+  const totalSeniors = summary
+    ? summary.summary.reduce((s, b) => s + b.senior_count, 0)
+    : 0;
 
   return (
     <>
@@ -38,9 +51,18 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* ─── Budget donut cards ───────────────────── */}
       <div className="g3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18, marginBottom: 28 }}>
-        {TABS.map((tab) => {
-          const b = BUDGET[tab];
+        {loading && (
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', color: 'var(--ink-400)', padding: 40 }}>로딩 중...</div>
+        )}
+        {!loading && TABS.map((tab) => {
+          const apiData = summary?.summary.find((s) => s.type === TYPE_KEY[tab]);
+          const pct = apiData ? Math.min(Math.round(apiData.achievement_rate), 100) : 0;
           const tone = TAB_TONE[tab];
+          const lines = apiData ? [
+            { l: '어르신 임금', pct: Math.round(apiData.breakdown.wage.rate), total: apiData.breakdown.wage.budget },
+            { l: '담당자 임금', pct: Math.round(apiData.breakdown.manager_wage.rate), total: apiData.breakdown.manager_wage.budget },
+            { l: '사업진행비',  pct: Math.round(apiData.breakdown.operation.rate), total: apiData.breakdown.operation.budget },
+          ] : [];
           return (
             <div key={tab} onClick={() => onNavigate('budget', tab)} style={{
               background: '#fff', border: '1px solid var(--line)', borderRadius: 20,
@@ -50,14 +72,14 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink-900)' }}>{tab}</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 2 }}>{b.count}명 참여</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 2 }}>{apiData?.senior_count ?? 0}명 참여</div>
                 </div>
-                <Chip tone={b.pct > 90 ? 'danger' : b.pct > 70 ? 'warm' : 'green'} size="sm">{b.pct}% 집행</Chip>
+                <Chip tone={pct > 90 ? 'danger' : pct > 70 ? 'warm' : 'green'} size="sm">{pct}% 집행</Chip>
               </div>
               <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-                <Donut value={b.pct} color={tone.color} size={100} label={`${b.pct}%`}/>
+                <Donut value={pct} color={tone.color} size={100} label={`${pct}%`}/>
                 <div style={{ flex: 1 }}>
-                  {b.lines.map((line) => (
+                  {lines.map((line) => (
                     <div key={line.l} style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-500)', marginBottom: 4 }}>
                         <span>{line.l}</span>
@@ -67,7 +89,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     </div>
                   ))}
                   <div className="num" style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 6 }}>
-                    잔액 <strong style={{ color: tone.color }}>{won(b.remain)}</strong>
+                    잔액 <strong style={{ color: tone.color }}>{won(apiData?.remaining ?? 0)}</strong>
                   </div>
                 </div>
               </div>

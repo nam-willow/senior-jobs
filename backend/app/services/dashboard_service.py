@@ -33,9 +33,7 @@ async def get_summary(db: AsyncSession, tenant_id: str, year: int) -> dict:
         bus = list(bu_result.scalars().all())
         bu_ids = [bu.id for bu in bus]
 
-        total_budget = sum(
-            bu.total_annual_hours * 0 for bu in bus  # placeholder
-        )
+        total_budget = 0
         total_expenditure = 0
         wage_budget = 0
         wage_spent = 0

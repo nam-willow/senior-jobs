@@ -3,6 +3,7 @@ import type { PageType, TabType } from '../../types';
 import { Logo } from '../shared/Logo';
 import { Icons } from '../shared/Icons';
 import { ALERTS } from '../../data/mockData';
+import { useAuthStore } from '../../stores/authStore';
 
 const NAV_ITEMS = [
   { id: 'dashboard' as PageType,  ic: Icons.grid,      label: '메인 대시보드' },
@@ -27,6 +28,7 @@ interface AdminShellProps {
 
 export function AdminShell({ page, year, month, onNavigate, children }: AdminShellProps) {
   const pageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || '';
+  const logout = useAuthStore((s) => s.logout);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--cream-50)' }}>
@@ -87,8 +89,9 @@ export function AdminShell({ page, year, month, onNavigate, children }: AdminShe
           })}
         </nav>
 
-        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--line-soft)', fontSize: 13, color: 'var(--ink-500)' }}>
-          2026 회계연도 · <span style={{ color: 'var(--green-700)', fontWeight: 700 }}>11월</span>까지
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--line-soft)', fontSize: 13, color: 'var(--ink-500)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>2026 회계연도 · <span style={{ color: 'var(--green-700)', fontWeight: 700 }}>11월</span>까지</span>
+          <span onClick={() => logout()} style={{ cursor: 'pointer', color: 'var(--ink-400)', fontWeight: 500 }}>로그아웃</span>
         </div>
       </aside>
 
