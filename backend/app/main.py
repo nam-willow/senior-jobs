@@ -11,8 +11,18 @@ from slowapi.util import get_remote_address
 from app.core.config import settings
 from app.core.database import close_redis
 from app.core.logging import RequestLoggingMiddleware, setup_logging
-from app.models import audit_log, tenant, user  # noqa: F401 — Base.metadata 등록
-from app.routers import auth, seniors
+# noqa: F401 — Base.metadata 등록
+from app.models import audit_log, tenant, user  # noqa: F401
+from app.models import (  # noqa: F401
+    business_unit, senior, monthly_work_records,
+    consultation_log, annual_budget, budget_expenditure,
+    policy_rule, user_business_unit,
+)
+from app.routers import (
+    auth, seniors, tenants, users, business_units,
+    work_records, budgets, consultation_logs,
+    audit_logs, policy_rules, dashboard,
+)
 
 
 @asynccontextmanager
@@ -46,8 +56,18 @@ app.add_middleware(
 )
 
 # ── 라우터 ────────────────────────────────────────────────────────────────────
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(seniors.router, prefix="/api/v1")
+PREFIX = "/api/v1"
+app.include_router(auth.router,              prefix=PREFIX)
+app.include_router(tenants.router,           prefix=PREFIX)
+app.include_router(users.router,             prefix=PREFIX)
+app.include_router(business_units.router,    prefix=PREFIX)
+app.include_router(seniors.router,           prefix=PREFIX)
+app.include_router(work_records.router,      prefix=PREFIX)
+app.include_router(budgets.router,           prefix=PREFIX)
+app.include_router(consultation_logs.router, prefix=PREFIX)
+app.include_router(audit_logs.router,        prefix=PREFIX)
+app.include_router(policy_rules.router,      prefix=PREFIX)
+app.include_router(dashboard.router,         prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

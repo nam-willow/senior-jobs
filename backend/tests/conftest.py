@@ -22,6 +22,15 @@ from app.core.security import hash_password
 from app.models.audit_log import AuditLog  # noqa: F401 — Base.metadata 등록용
 from app.models.tenant import Tenant  # noqa: F401
 from app.models.user import User, UserRole
+# Phase 2 모델 등록 (FK 해결을 위해 import 필수)
+from app.models.business_unit import BusinessUnit  # noqa: F401
+from app.models.senior import Senior  # noqa: F401
+from app.models.monthly_work_records import MonthlyWorkRecord  # noqa: F401
+from app.models.consultation_log import ConsultationLog  # noqa: F401
+from app.models.annual_budget import AnnualBudget  # noqa: F401
+from app.models.budget_expenditure import BudgetExpenditure  # noqa: F401
+from app.models.policy_rule import PolicyRule, PolicyVersion  # noqa: F401
+from app.models.user_business_unit import UserBusinessUnit  # noqa: F401
 
 # ── 테스트 DB URL ─────────────────────────────────────────────────────────────
 TEST_DB_URL = settings.database_url.rsplit("/", 1)[0] + "/senior_jobs_test"
@@ -45,11 +54,26 @@ async def create_tables():
         await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
         await conn.run_sync(Base.metadata.drop_all)
         # drop_all removes tables but not ENUM types — recreate them
-        for enum_name in ("userrole",):
+        for enum_name in (
+            "userrole", "businessunittype", "budgetcategory",
+            "workrecordstatus", "consultationmethod",
+        ):
             await conn.execute(text(f"DROP TYPE IF EXISTS {enum_name} CASCADE"))
         await conn.execute(text(
             "CREATE TYPE userrole AS ENUM "
             "('platform_admin','tenant_admin','social_worker','approver','auditor','viewer')"
+        ))
+        await conn.execute(text(
+            "CREATE TYPE businessunittype AS ENUM ('public_benefit','social_service','market')"
+        ))
+        await conn.execute(text(
+            "CREATE TYPE budgetcategory AS ENUM ('wage','manager_wage','operation')"
+        ))
+        await conn.execute(text(
+            "CREATE TYPE workrecordstatus AS ENUM ('DRAFT','SUBMITTED','APPROVED','REJECTED')"
+        ))
+        await conn.execute(text(
+            "CREATE TYPE consultationmethod AS ENUM ('phone','visit','in_person','other')"
         ))
         await conn.run_sync(Base.metadata.create_all)
         # create non-privileged role for RLS integration tests
@@ -60,7 +84,11 @@ async def create_tables():
         ))
         await conn.execute(text("GRANT SELECT ON users, tenants TO app_role"))
         # create_all does not add RLS — apply tenant isolation policy manually
-        for table in ("tenants", "users", "audit_logs"):
+        for table in (
+            "tenants", "users", "audit_logs", "business_units", "seniors",
+            "monthly_work_records", "consultation_logs", "annual_budgets",
+            "budget_expenditures", "policy_rules",
+        ):
             await conn.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
             await conn.execute(text(f"ALTER TABLE {table} FORCE  ROW LEVEL SECURITY"))
             await conn.execute(text(
@@ -75,7 +103,11 @@ async def create_tables():
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-        await conn.execute(text("DROP TYPE IF EXISTS userrole CASCADE"))
+        for enum_name in (
+            "userrole", "businessunittype", "budgetcategory",
+            "workrecordstatus", "consultationmethod",
+        ):
+            await conn.execute(text(f"DROP TYPE IF EXISTS {enum_name} CASCADE"))
 
 
 @pytest_asyncio.fixture

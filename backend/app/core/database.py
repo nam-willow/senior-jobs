@@ -1,9 +1,12 @@
 from __future__ import annotations
 from collections.abc import AsyncGenerator
+from contextlib import contextmanager
+from typing import Optional
 
 import redis.asyncio as aioredis
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
@@ -30,6 +33,22 @@ class Base(DeclarativeBase):
     pass
 
 
+# ── Sync Engine (work_hours.py 전용) ──────────────────────────────────────────
+
+_sync_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+sync_engine = create_engine(_sync_url, pool_pre_ping=True)
+SyncSessionLocal = sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
+
+
+@contextmanager
+def get_sync_db():
+    db = SyncSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
@@ -42,7 +61,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # ── Redis ─────────────────────────────────────────────────────────────────────
 
-_redis_pool: Optional[aioredis.Redis] = None
+_redis_pool: Optional["aioredis.Redis"] = None
 
 
 async def get_redis() -> aioredis.Redis:
