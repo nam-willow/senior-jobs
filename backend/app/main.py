@@ -17,11 +17,13 @@ from app.models import (  # noqa: F401
     business_unit, senior, monthly_work_records,
     consultation_log, annual_budget, budget_expenditure,
     policy_rule, user_business_unit,
+    document_snapshot, generated_file,
 )
 from app.routers import (
     auth, seniors, tenants, users, business_units,
     work_records, budgets, consultation_logs,
     audit_logs, policy_rules, dashboard,
+    work_logs, tasks,
 )
 
 
@@ -68,6 +70,8 @@ app.include_router(consultation_logs.router, prefix=PREFIX)
 app.include_router(audit_logs.router,        prefix=PREFIX)
 app.include_router(policy_rules.router,      prefix=PREFIX)
 app.include_router(dashboard.router,         prefix=PREFIX)
+app.include_router(work_logs.router,         prefix=PREFIX)
+app.include_router(tasks.router,             prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

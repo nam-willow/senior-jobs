@@ -31,6 +31,8 @@ from app.models.annual_budget import AnnualBudget  # noqa: F401
 from app.models.budget_expenditure import BudgetExpenditure  # noqa: F401
 from app.models.policy_rule import PolicyRule, PolicyVersion  # noqa: F401
 from app.models.user_business_unit import UserBusinessUnit  # noqa: F401
+from app.models.document_snapshot import DocumentSnapshot  # noqa: F401
+from app.models.generated_file import GeneratedFile  # noqa: F401
 
 # ── 테스트 DB URL ─────────────────────────────────────────────────────────────
 TEST_DB_URL = settings.database_url.rsplit("/", 1)[0] + "/senior_jobs_test"
