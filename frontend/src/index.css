@@ -1,0 +1,73 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --green-50:  #F0FDF4;
+  --green-100: #DCFCE7;
+  --green-200: #BBF7D0;
+  --green-400: #4ADE80;
+  --green-600: #16A34A;
+  --green-700: #15803D;
+  --green-800: #166534;
+  --green-900: #14532D;
+
+  --cream-50:  #FBF9F4;
+  --cream-100: #F5F0E8;
+  --ink-900:   #1F2A24;
+  --ink-700:   #374843;
+  --ink-500:   #6B7B74;
+  --ink-400:   #8A9E96;
+  --ink-300:   #B0BDB8;
+
+  --warm:      #D97757;
+  --warm-soft: #FEF0E8;
+  --gold:      #D6A647;
+  --gold-soft: #FEF8E6;
+  --info:      #3B82A0;
+  --danger:    #C04646;
+
+  --line:      #E5EAE8;
+  --line-soft: #EEF2F0;
+
+  --shadow-sm: 0 1px 4px rgba(31,42,36,0.06);
+  --shadow:    0 2px 10px rgba(31,42,36,0.10);
+  --shadow-lg: 0 8px 32px rgba(31,42,36,0.16);
+
+  --font-sans: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  color: var(--ink-900);
+  background: var(--cream-50);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { min-height: 100vh; }
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+button { font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+@media (max-width: 900px) {
+  .sb { display: none !important; }
+  .g4 { grid-template-columns: repeat(2,1fr) !important; }
+  .g3 { grid-template-columns: 1fr !important; }
+  .content { padding: 10px 12px !important; }
+  td, th { font-size: 11px !important; padding: 6px 7px !important; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .page-break { page-break-after: always; }
+}
