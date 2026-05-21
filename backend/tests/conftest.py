@@ -150,6 +150,11 @@ def redis_mock():
     async def expire(key, ttl):
         pass
 
+    async def incr(key):
+        cur = int(store.get(key) or 0)
+        store[key] = cur + 1
+        return cur + 1
+
     class Pipeline:
         def __init__(self):
             self._cmds = []
@@ -200,6 +205,7 @@ def redis_mock():
     mock.srem = srem
     mock.smembers = smembers
     mock.expire = expire
+    mock.incr = incr
     mock.pipeline = lambda: Pipeline()
     mock._store = store
     return mock
@@ -234,9 +240,11 @@ async def test_user(db: AsyncSession, test_tenant_id: str) -> User:
 
 
 def make_app(db_session: AsyncSession, redis_mock) -> FastAPI:
-    from app.routers.auth import router as auth_router
+    from app.routers.auth import router as auth_router, limiter as auth_limiter
     from app.core.logging import RequestLoggingMiddleware, setup_logging
     setup_logging()
+    # 테스트 간 slowapi 카운터 초기화 (모듈-레벨 싱글톤이 누적됨)
+    auth_limiter._storage.storage.clear()
     app = FastAPI()
     app.include_router(auth_router, prefix="/api/v1")
     app.dependency_overrides[get_db] = lambda: db_session

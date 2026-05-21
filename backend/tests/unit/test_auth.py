@@ -93,6 +93,60 @@ async def test_refresh_token_reuse_detection(client):
     assert "보안" in reuse_resp.json()["detail"]
 
 
+# ── TC-AUTH-06: IP 차단 — 5회 실패 후 429 ────────────────────────────────────
+# 고유 X-Forwarded-For IP 사용: slowapi module-level 카운터와 분리
+
+@pytest.mark.asyncio
+async def test_ip_blocked_after_failures(client):
+    ac, user = client
+    headers = {"X-Forwarded-For": "10.0.1.1"}
+
+    # 5회 연속 로그인 실패
+    for _ in range(5):
+        resp = await ac.post("/api/v1/auth/login", json={
+            "email": user.email,
+            "password": "BadPass!",
+        }, headers=headers)
+        assert resp.status_code == 401
+
+    # 6번째 시도 → 429
+    blocked = await ac.post("/api/v1/auth/login", json={
+        "email": user.email,
+        "password": "BadPass!",
+    }, headers=headers)
+    assert blocked.status_code == 429
+    assert "초과" in blocked.json()["detail"]
+
+
+# ── TC-AUTH-07: 성공 로그인 시 실패 카운터 초기화 ────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ip_fail_counter_reset_on_success(client):
+    ac, user = client
+    headers = {"X-Forwarded-For": "10.0.1.2"}
+
+    # 4회 실패 (아직 차단 미만)
+    for _ in range(4):
+        await ac.post("/api/v1/auth/login", json={
+            "email": user.email,
+            "password": "BadPass!",
+        }, headers=headers)
+
+    # 성공 로그인 → 카운터 초기화
+    ok = await ac.post("/api/v1/auth/login", json={
+        "email": user.email,
+        "password": "Test1234!",
+    }, headers=headers)
+    assert ok.status_code == 200
+
+    # 이후 실패해도 즉시 차단되지 않음 (카운터가 0에서 시작)
+    resp = await ac.post("/api/v1/auth/login", json={
+        "email": user.email,
+        "password": "BadPass!",
+    }, headers=headers)
+    assert resp.status_code == 401  # 차단 아닌 401
+
+
 # ── TC-AUTH-05: 로그아웃 ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

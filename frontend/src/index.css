@@ -59,12 +59,53 @@ body {
 button { font-family: inherit; }
 input, select, textarea { font-family: inherit; }
 
+/* ── Mobile (≤ 900px) ─────────────────────────────────── */
 @media (max-width: 900px) {
   .sb { display: none !important; }
+  .mobile-nav { display: flex !important; }
   .g4 { grid-template-columns: repeat(2,1fr) !important; }
   .g3 { grid-template-columns: 1fr !important; }
-  .content { padding: 10px 12px !important; }
+  .content { padding: 10px 12px 76px !important; }
   td, th { font-size: 11px !important; padding: 6px 7px !important; }
+}
+
+/* 하단 탭바 — 기본 숨김, 모바일에서만 표시 */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 60px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  z-index: 100;
+  align-items: stretch;
+  justify-content: space-around;
+}
+
+.mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-500);
+  cursor: pointer;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+
+.mobile-nav-item.active {
+  color: var(--green-700);
+}
+
+.mobile-nav-item svg {
+  width: 22px;
+  height: 22px;
 }
 
 @media print {

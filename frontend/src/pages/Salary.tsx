@@ -1,5 +1,10 @@
 import type { TabType } from '../types';
-import { SENIORS, BUDGET, fmt, won } from '../data/mockData';
+import { useAppStore } from '../stores/appStore';
+import { useBusinessUnits } from '../hooks/useBusinessUnits';
+import { useSeniors } from '../hooks/useSeniors';
+import { useWorkRecords } from '../hooks/useWorkRecords';
+import { useBudget } from '../hooks/useBudget';
+import { fmt, won } from '../data/mockData';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { BudgetStrip } from '../components/layout/BudgetStrip';
 import { AlertBox } from '../components/layout/AlertBox';
@@ -15,19 +20,28 @@ interface SalaryProps {
   month: number;
 }
 
-const HOURS_BY_NAME: Record<string, number> = {
-  '김영자': 30, '박철수': 28, '이순희': 30, '최대호': 42, '정미숙': 30,
-  '한상호': 30, '윤정숙': 24, '강민준': 36, '박영순': 0,  '장순자': 30,
-  '오영자': 28, '신복례': 30,
-};
-const RATE = 4000;
-
 export function Salary({ tab, setTab, year, month }: SalaryProps) {
-  const tabSeniors = SENIORS.filter((s) => s.unit === tab);
-  const rows = tabSeniors.map((s) => ({ ...s, hours: HOURS_BY_NAME[s.name] || 0, amount: (HOURS_BY_NAME[s.name] || 0) * RATE }));
-  const totalH = rows.reduce((s, r) => s + r.hours, 0);
-  const totalA = rows.reduce((s, r) => s + r.amount, 0);
-  const b = BUDGET[tab];
+  const storeYear = useAppStore((s) => s.year);
+  const { byTab } = useBusinessUnits(storeYear);
+  const bu = byTab(tab);
+  const { seniors, loading: sLoading } = useSeniors(bu?.id ?? null);
+  const { records, loading: rLoading } = useWorkRecords(year, month, bu?.id ?? null);
+  const { totalBudget, totalSpent, remaining, pct, loading: bLoading } = useBudget(bu?.id ?? null, year);
+
+  const approvedRecords = records.filter((r) => r.status === 'APPROVED');
+
+  const rows = seniors.map((s) => {
+    const rec = approvedRecords.find((r) => r.senior_id === s.id);
+    return {
+      ...s,
+      hours: rec?.worked_hours ?? 0,
+      amount: rec?.amount_paid ?? 0,
+    };
+  });
+
+  const totalH = rows.reduce((sum, r) => sum + r.hours, 0);
+  const totalA = rows.reduce((sum, r) => sum + r.amount, 0);
+  const loading = sLoading || rLoading || bLoading;
 
   return (
     <>
@@ -44,19 +58,19 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 18 }}>
         <Card padding="16px 20px">
           <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>연간 총 사업비</div>
-          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>{won(b.total)}</div>
+          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>{won(totalBudget)}</div>
           <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 2 }}>임금 + 담당자 + 사업진행비</div>
         </Card>
-        <Card padding="16px 20px" style={{ borderLeft: `4px solid ${b.color}` }}>
+        <Card padding="16px 20px" style={{ borderLeft: '4px solid var(--green-600)' }}>
           <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>현재까지 사용</div>
-          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: b.color, marginTop: 4 }}>{won(b.used)}</div>
-          <Progress value={b.pct} color={b.color} height={6}/>
-          <div className="num" style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4 }}>{b.pct}% · 1~5월</div>
+          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: 'var(--green-600)', marginTop: 4 }}>{won(totalSpent)}</div>
+          <Progress value={pct} color="var(--green-600)" height={6}/>
+          <div className="num" style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4 }}>{pct}% 집행</div>
         </Card>
         <Card padding="16px 20px" style={{ borderLeft: '4px solid var(--green-600)' }}>
           <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>잔여 사업비</div>
-          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: 'var(--green-700)', marginTop: 4 }}>{won(b.remain)}</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 2 }}>6~11월 (6개월)</div>
+          <div className="num" style={{ fontSize: 24, fontWeight: 800, color: remaining >= 0 ? 'var(--green-700)' : 'var(--danger)', marginTop: 4 }}>{won(remaining)}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 2 }}>{100 - pct}% 남음</div>
         </Card>
       </div>
 
@@ -69,40 +83,48 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
       </div>
 
       <Card padding="0" style={{ borderRadius: '0 0 18px 18px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
-          <thead>
-            <tr style={{ background: 'var(--cream-50)' }}>
-              {['번호', '이름', '생년월일', '근무시간', '지급금액', '서명', '등록 사복사'].map((h, i) => (
-                <th key={h} style={{ padding: '14px 16px', textAlign: i === 4 ? 'right' : 'center', fontWeight: 700, color: 'var(--ink-500)', fontSize: 13, borderBottom: '1.5px solid var(--line)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.id} style={{ borderTop: '1px solid var(--line-soft)' }}>
-                <td style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-500)' }}>{i + 1}</td>
-                <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--ink-900)' }}>{r.name}</td>
-                <td className="num" style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-700)' }}>{r.birth.replace(/\./g, '').slice(2, 8)}</td>
-                <td className="num" style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-700)' }}>{r.hours}h</td>
-                <td className="num" style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 700, color: r.amount ? 'var(--ink-900)' : 'var(--ink-400)' }}>
-                  {r.amount ? fmt(r.amount) + '원' : '—'}
-                </td>
-                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                  <div style={{ width: 60, height: 28, margin: '0 auto', border: '1px dashed var(--line)', borderRadius: 4, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-400)' }}>(인)</div>
-                </td>
-                <td style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--green-700)', fontWeight: 600 }}>{r.sw}</td>
+        {loading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--ink-400)' }}>로딩 중…</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
+            <thead>
+              <tr style={{ background: 'var(--cream-50)' }}>
+                {['번호', '이름', '생년월일', '근무시간', '지급금액', '서명'].map((h, i) => (
+                  <th key={h} style={{ padding: '14px 16px', textAlign: i === 4 ? 'right' : 'center', fontWeight: 700, color: 'var(--ink-500)', fontSize: 13, borderBottom: '1.5px solid var(--line)' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ background: 'var(--cream-50)', borderTop: '2px solid var(--line)' }}>
-              <td colSpan={3} style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 800, color: 'var(--ink-900)' }}>합계</td>
-              <td className="num" style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 800 }}>{totalH}h</td>
-              <td className="num" style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--green-700)' }}>{fmt(totalA)}원</td>
-              <td colSpan={2}/>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.id} style={{ borderTop: '1px solid var(--line-soft)' }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-500)' }}>{i + 1}</td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--ink-900)' }}>{r.name}</td>
+                  <td className="num" style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-700)' }}>{r.birth_date ? r.birth_date.replace(/-/g, '.') : '—'}</td>
+                  <td className="num" style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--ink-700)' }}>{r.hours}h</td>
+                  <td className="num" style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 700, color: r.amount ? 'var(--ink-900)' : 'var(--ink-400)' }}>
+                    {r.amount ? fmt(r.amount) + '원' : '—'}
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ width: 60, height: 28, margin: '0 auto', border: '1px dashed var(--line)', borderRadius: 4, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-400)' }}>(인)</div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: 'var(--ink-400)' }}>이 사업단에 등록된 어르신이 없습니다.</td></tr>
+              )}
+            </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr style={{ background: 'var(--cream-50)', borderTop: '2px solid var(--line)' }}>
+                  <td colSpan={3} style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 800, color: 'var(--ink-900)' }}>합계</td>
+                  <td className="num" style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 800 }}>{totalH}h</td>
+                  <td className="num" style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--green-700)' }}>{fmt(totalA)}원</td>
+                  <td/>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        )}
       </Card>
 
       <div style={{ marginTop: 16, fontSize: 12, color: 'var(--ink-400)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>

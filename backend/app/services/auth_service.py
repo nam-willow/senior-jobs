@@ -26,6 +26,30 @@ from app.schemas.auth import TokenResponse
 from app.services.audit import record_audit
 
 
+_IP_FAIL_PREFIX = "login_fail:"
+_IP_FAIL_MAX = 5
+_IP_FAIL_TTL = 900  # 15분
+
+
+async def _check_ip_blocked(redis: aioredis.Redis, ip: str) -> None:
+    count = await redis.get(f"{_IP_FAIL_PREFIX}{ip}")
+    if count and int(count) >= _IP_FAIL_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요.",
+        )
+
+
+async def _record_ip_fail(redis: aioredis.Redis, ip: str) -> None:
+    key = f"{_IP_FAIL_PREFIX}{ip}"
+    await redis.incr(key)
+    await redis.expire(key, _IP_FAIL_TTL)
+
+
+async def _clear_ip_fail(redis: aioredis.Redis, ip: str) -> None:
+    await redis.delete(f"{_IP_FAIL_PREFIX}{ip}")
+
+
 async def login(
     db: AsyncSession,
     redis: aioredis.Redis,
@@ -35,17 +59,21 @@ async def login(
     ip_address: str,
     user_agent: Optional[str] = None,
 ) -> TokenResponse:
+    await _check_ip_blocked(redis, ip_address)
+
     result = await db.execute(
         select(User).where(User.email == email, User.is_active.is_(True))
     )
     user: User | None = result.scalar_one_or_none()
 
     if user is None or not verify_password(password, user.password_hash):
+        await _record_ip_fail(redis, ip_address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="이메일 또는 비밀번호가 올바르지 않습니다.",
         )
 
+    await _clear_ip_fail(redis, ip_address)
     user.last_login_at = datetime.now(timezone.utc)
     await db.flush()
 

@@ -149,6 +149,22 @@ export function AdminShell({ page, year, month, onNavigate, children }: AdminShe
           {children}
         </main>
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="mobile-nav">
+        {[
+          { id: 'dashboard' as PageType, label: '홈',     ic: Icons.grid    },
+          { id: 'seniors'   as PageType, label: '어르신', ic: Icons.people  },
+          { id: 'work'      as PageType, label: '근무',   ic: Icons.briefcase },
+          { id: 'consult'   as PageType, label: '상담',   ic: Icons.heart   },
+          { id: 'alerts'    as PageType, label: '알림',   ic: Icons.bell    },
+        ].map((n) => (
+          <button key={n.id} className={`mobile-nav-item${page === n.id ? ' active' : ''}`} onClick={() => onNavigate(n.id)}>
+            <n.ic/>
+            <span>{n.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
