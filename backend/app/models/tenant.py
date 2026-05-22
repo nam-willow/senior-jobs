@@ -18,6 +18,7 @@ class Tenant(Base):
     )
     tenant_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     business_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     subscription_plan: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="basic"

@@ -4,6 +4,7 @@ import { useAppStore } from '../stores/appStore';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useSeniors } from '../hooks/useSeniors';
 import { useWorkRecords } from '../hooks/useWorkRecords';
+import { api } from '../lib/api';
 import { fmt } from '../data/mockData';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { BudgetStrip } from '../components/layout/BudgetStrip';
@@ -25,10 +26,16 @@ interface WorkProps {
 export function Work({ tab, setTab, focusSenior, setFocusSenior }: WorkProps) {
   const year = useAppStore((s) => s.year);
   const month = useAppStore((s) => s.month);
-  const { byTab } = useBusinessUnits(year);
+  const { units, byTab } = useBusinessUnits(year);
   const bu = byTab(tab);
   const { seniors, loading: sLoading } = useSeniors(bu?.id ?? null);
-  const { records, loading: rLoading, save } = useWorkRecords(year, month, bu?.id ?? null);
+  const { records, loading: rLoading, save, submit, refetch } = useWorkRecords(year, month, bu?.id ?? null);
+
+  const availableTabs = units.map((u) => {
+    if (u.type === 'public_benefit') return '공익활동형' as TabType;
+    if (u.type === 'social_service') return '사회서비스형' as TabType;
+    return '시장형' as TabType;
+  });
 
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [saving, setSaving] = useState(false);
@@ -89,14 +96,31 @@ export function Work({ tab, setTab, focusSenior, setFocusSenior }: WorkProps) {
     }
   };
 
+  const handleSubmitAll = async () => {
+    const draftRecords = records.filter((r) => r.status === 'DRAFT');
+    if (draftRecords.length === 0) { alert('결재 요청할 근무기록이 없습니다 (DRAFT 상태만 가능).'); return; }
+    setSaving(true);
+    try {
+      for (const rec of draftRecords) {
+        await submit(rec.id);
+      }
+      alert(`${draftRecords.length}건이 결재 요청되었습니다.`);
+    } catch {
+      alert('결재 요청 중 오류가 발생했습니다.');
+    } finally {
+      setSaving(false);
+      refetch();
+    }
+  };
+
   const loading = sLoading || rLoading;
 
   return (
     <>
-      <UnitTabBar tab={tab} onChange={setTab} right={
+      <UnitTabBar tab={tab} onChange={setTab} availableTabs={availableTabs} right={
         <>
           <span style={{ fontSize: 14, color: 'var(--ink-500)' }}>수정 <strong className="num" style={{ color: dirtyCount > 0 ? 'var(--warm)' : 'var(--ink-700)' }}>{dirtyCount}</strong>건</span>
-          <Button variant="secondary" size="sm" icon={<Icons.check/>}>결재 요청</Button>
+          <Button variant="secondary" size="sm" icon={<Icons.check/>} onClick={handleSubmitAll}>결재 요청</Button>
           <Button variant="primary" size="sm" icon={<Icons.check/>} onClick={handleSaveAll}>{saving ? '저장 중…' : '전체 저장'}</Button>
         </>
       }/>
@@ -216,7 +240,7 @@ export function Work({ tab, setTab, focusSenior, setFocusSenior }: WorkProps) {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <Button variant="ghost" size="md">취소</Button>
-          <Button variant="secondary" size="md">결재 요청</Button>
+          <Button variant="secondary" size="md" onClick={handleSubmitAll}>결재 요청</Button>
           <Button variant="primary" size="md" icon={<Icons.check/>} onClick={handleSaveAll}>
             {saving ? '저장 중…' : `전체 저장 (${dirtyCount})`}
           </Button>

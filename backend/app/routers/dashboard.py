@@ -24,6 +24,28 @@ async def get_summary(
     return await dashboard_service.get_summary(db, current_user.tenant_id, year)
 
 
+@router.get("/alerts")
+async def get_alerts(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    year: Optional[int] = None,
+):
+    if year is None:
+        year = date.today().year
+    return await dashboard_service.get_alerts(db, current_user.tenant_id, year)
+
+
+@router.get("/monthly-hours")
+async def get_monthly_hours(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    year: Optional[int] = None,
+):
+    if year is None:
+        year = date.today().year
+    return await dashboard_service.get_monthly_hours(db, current_user.tenant_id, year)
+
+
 @router.get("/kpi")
 async def get_kpi(
     current_user: Annotated[CurrentUser, RequireTenantAdmin],

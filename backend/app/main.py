@@ -20,7 +20,7 @@ from app.models import (  # noqa: F401
     document_snapshot, generated_file,
 )
 from app.routers import (
-    auth, seniors, tenants, users, business_units,
+    auth, register, seniors, tenants, users, business_units,
     work_records, budgets, consultation_logs,
     audit_logs, policy_rules, dashboard,
     work_logs, tasks,
@@ -53,13 +53,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
 # ── 라우터 ────────────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
 app.include_router(auth.router,              prefix=PREFIX)
+app.include_router(register.router,          prefix=PREFIX)
 app.include_router(tenants.router,           prefix=PREFIX)
 app.include_router(users.router,             prefix=PREFIX)
 app.include_router(business_units.router,    prefix=PREFIX)

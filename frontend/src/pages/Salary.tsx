@@ -20,13 +20,42 @@ interface SalaryProps {
   month: number;
 }
 
+function downloadSalary(year: number, month: number, buId: string | null, format: 'excel' | 'pdf') {
+  const params = new URLSearchParams({ format });
+  if (buId) params.append('business_unit_id', buId);
+  const token = localStorage.getItem('access_token') ?? '';
+  const ext = format === 'excel' ? 'xlsx' : 'pdf';
+  fetch(`/api/v1/work-logs/salary-statement/${year}/${month}?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error('no approved records');
+      return r.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `salary_${year}_${String(month).padStart(2, '0')}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    })
+    .catch(() => alert('다운로드 실패. 승인된 근무기록이 없을 수 있습니다.'));
+}
+
 export function Salary({ tab, setTab, year, month }: SalaryProps) {
   const storeYear = useAppStore((s) => s.year);
-  const { byTab } = useBusinessUnits(storeYear);
+  const { units, byTab } = useBusinessUnits(storeYear);
   const bu = byTab(tab);
   const { seniors, loading: sLoading } = useSeniors(bu?.id ?? null);
   const { records, loading: rLoading } = useWorkRecords(year, month, bu?.id ?? null);
   const { totalBudget, totalSpent, remaining, pct, loading: bLoading } = useBudget(bu?.id ?? null, year);
+
+  const availableTabs = units.map((u) => {
+    if (u.type === 'public_benefit') return '공익활동형' as TabType;
+    if (u.type === 'social_service') return '사회서비스형' as TabType;
+    return '시장형' as TabType;
+  });
 
   const approvedRecords = records.filter((r) => r.status === 'APPROVED');
 
@@ -45,11 +74,14 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
 
   return (
     <>
-      <UnitTabBar tab={tab} onChange={setTab} right={
+      <UnitTabBar tab={tab} onChange={setTab} availableTabs={availableTabs} right={
         <>
-          <Button variant="secondary" size="sm" icon={<Icons.download/>}>Excel</Button>
-          <Button variant="secondary" size="sm" icon={<Icons.download/>}>PDF</Button>
-          <Button variant="primary" size="sm" icon={<Icons.doc/>}>인쇄</Button>
+          <Button variant="secondary" size="sm" icon={<Icons.download/>}
+            onClick={() => downloadSalary(year, month, bu?.id ?? null, 'excel')}>Excel</Button>
+          <Button variant="secondary" size="sm" icon={<Icons.download/>}
+            onClick={() => downloadSalary(year, month, bu?.id ?? null, 'pdf')}>PDF</Button>
+          <Button variant="primary" size="sm" icon={<Icons.doc/>}
+            onClick={() => window.print()}>인쇄</Button>
         </>
       }/>
 
@@ -126,10 +158,6 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
           </table>
         )}
       </Card>
-
-      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--ink-400)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-        출력 시 document_snapshots에 자동 저장
-      </div>
     </>
   );
 }

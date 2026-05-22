@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { Logo } from '../components/shared/Logo';
 
-export function Login() {
+interface LoginProps {
+  onShowRegister: () => void;
+}
+
+export function Login({ onShowRegister }: LoginProps) {
   const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -87,6 +91,13 @@ export function Login() {
           }}>
             {loading ? '로그인 중...' : '로그인'}
           </button>
+
+          <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--ink-500)', marginTop: 4 }}>
+            처음 이용하시나요?{' '}
+            <span onClick={onShowRegister} style={{ color: 'var(--green-700)', fontWeight: 700, cursor: 'pointer' }}>
+              기관 등록
+            </span>
+          </div>
         </form>
       </div>
     </div>

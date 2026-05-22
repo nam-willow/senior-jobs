@@ -57,6 +57,9 @@ class WorkRecordResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     senior_id: uuid.UUID
+    senior_name: Optional[str] = None
+    business_unit_type: Optional[str] = None
+    business_unit_name: Optional[str] = None
     year: int
     month: int
     worked_hours: float

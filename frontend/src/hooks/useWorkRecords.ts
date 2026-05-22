@@ -52,5 +52,10 @@ export function useWorkRecords(year: number, month: number, businessUnitId: stri
     fetch();
   };
 
-  return { records, loading, refetch: fetch, save };
+  const submit = async (recordId: string) => {
+    await api.post(`/work-records/${recordId}/submit`);
+    fetch();
+  };
+
+  return { records, loading, refetch: fetch, save, submit };
 }

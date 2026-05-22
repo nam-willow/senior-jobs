@@ -1,7 +1,7 @@
 export type TabType = '공익활동형' | '사회서비스형' | '시장형';
 export type PageType =
   | 'dashboard' | 'seniors' | 'work' | 'worklog'
-  | 'salary' | 'consult' | 'budget' | 'approvals' | 'alerts';
+  | 'salary' | 'consult' | 'budget' | 'approvals' | 'alerts' | 'settings';
 
 export interface Senior {
   id: number;

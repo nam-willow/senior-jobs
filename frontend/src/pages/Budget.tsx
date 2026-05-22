@@ -3,6 +3,7 @@ import type { TabType } from '../types';
 import { useAppStore } from '../stores/appStore';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useBudget } from '../hooks/useBudget';
+import { api } from '../lib/api';
 import { TAB_TONE, fmt, won } from '../data/mockData';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { BudgetStrip } from '../components/layout/BudgetStrip';
@@ -25,16 +26,72 @@ interface BudgetProps {
 
 export function Budget({ tab, setTab }: BudgetProps) {
   const year = useAppStore((s) => s.year);
-  const { byTab } = useBusinessUnits(year);
+  const { units, byTab } = useBusinessUnits(year);
   const bu = byTab(tab);
-  const { budget, expenditures, loading, totalBudget, totalSpent, remaining, pct } = useBudget(bu?.id ?? null, year);
+  const { budget, expenditures, loading, totalBudget, totalSpent, remaining, pct, refetch } = useBudget(bu?.id ?? null, year);
   const color = TAB_TONE[tab].color;
   const [section, setSection] = useState<'expense' | 'income'>('expense');
 
+  const [formDate, setFormDate] = useState('');
+  const [formItem, setFormItem] = useState('');
+  const [formCategory, setFormCategory] = useState<'wage' | 'manager_wage' | 'operation'>('wage');
+  const [formAmount, setFormAmount] = useState('');
+  const [formNote, setFormNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const availableTabs = units.map((u) => {
+    if (u.type === 'public_benefit') return '공익활동형' as TabType;
+    if (u.type === 'social_service') return '사회서비스형' as TabType;
+    return '시장형' as TabType;
+  });
+
+  const handleSubmitExpense = async () => {
+    if (!budget || !formDate || !formItem || !formAmount) return;
+    setSubmitting(true);
+    try {
+      await api.post('/budgets/expenditures/', {
+        annual_budget_id: budget.id,
+        category: formCategory,
+        item_name: formItem,
+        amount: parseInt(formAmount, 10),
+        expense_date: formDate,
+        note: formNote || null,
+      });
+      setFormDate('');
+      setFormItem('');
+      setFormAmount('');
+      setFormNote('');
+      refetch();
+    } catch {
+      alert('지출 등록 중 오류가 발생했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleExcelDownload = () => {
+    if (!bu) return;
+    const token = localStorage.getItem('access_token');
+    const url = `/api/v1/work-logs/salary-statement/${year}/all?format=excel&business_unit_id=${bu.id}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', `budget_${tab}_${year}.xlsx`);
+    // Add auth header via fetch
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `expenditures_${tab}_${year}.xlsx`;
+        link.click();
+      })
+      .catch(() => alert('다운로드에 실패했습니다.'));
+  };
+
   return (
     <>
-      <UnitTabBar tab={tab} onChange={setTab} right={
-        <Button variant="secondary" size="sm" icon={<Icons.download/>}>전체 내보내기</Button>
+      <UnitTabBar tab={tab} onChange={setTab} availableTabs={availableTabs} right={
+        <Button variant="secondary" size="sm" icon={<Icons.download/>} onClick={handleExcelDownload}>전체 내보내기</Button>
       }/>
 
       <BudgetStrip tab={tab}/>
@@ -68,31 +125,51 @@ export function Budget({ tab, setTab }: BudgetProps) {
             ))}
           </div>
           <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
-              { label: section === 'expense' ? '지출일자' : '수입일자', el: <input type="date" style={inputStyle}/> },
-              { label: '항목명', el: <input type="text" placeholder="예: 5월 활동비" style={inputStyle}/> },
-              {
-                label: section === 'expense' ? '항목 구분' : '수입처',
-                el: section === 'expense'
-                  ? <select style={inputStyle}><option value="wage">어르신 임금</option><option value="manager_wage">담당자 임금</option><option value="operation">사업진행비</option></select>
-                  : <input type="text" placeholder="예: 보건복지부" style={inputStyle}/>,
-              },
-              { label: '금액 (원)', el: <input type="number" placeholder="0" style={inputStyle}/> },
-              { label: '비고', el: <textarea rows={3} placeholder="메모" style={{ ...inputStyle, resize: 'vertical' }}/> },
-            ].map((r) => (
-              <div key={r.label}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-700)', marginBottom: 6 }}>{r.label}</div>
-                {r.el}
-              </div>
-            ))}
-            <Button variant="primary" size="md" full icon={<Icons.plus/>}>
-              {section === 'expense' ? '지출 등록' : '수입 등록'}
-            </Button>
+            {section === 'expense' ? (
+              <>
+                <div>
+                  <div style={labelStyle}>지출일자</div>
+                  <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <div style={labelStyle}>항목명</div>
+                  <input type="text" value={formItem} onChange={(e) => setFormItem(e.target.value)} placeholder="예: 5월 활동비" style={inputStyle}/>
+                </div>
+                <div>
+                  <div style={labelStyle}>항목 구분</div>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value as typeof formCategory)} style={inputStyle}>
+                    <option value="wage">어르신 임금</option>
+                    <option value="manager_wage">담당자 임금</option>
+                    <option value="operation">사업진행비</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={labelStyle}>금액 (원)</div>
+                  <input type="number" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} placeholder="0" style={inputStyle}/>
+                </div>
+                <div>
+                  <div style={labelStyle}>비고</div>
+                  <textarea rows={3} value={formNote} onChange={(e) => setFormNote(e.target.value)} placeholder="메모" style={{ ...inputStyle, resize: 'vertical' }}/>
+                </div>
+                <Button
+                  variant="primary" size="md" full icon={<Icons.plus/>}
+                  onClick={handleSubmitExpense}
+                  disabled={submitting || !budget || !formDate || !formItem || !formAmount}
+                >
+                  {submitting ? '등록 중…' : '지출 등록'}
+                </Button>
+                {!budget && <div style={{ fontSize: 12, color: 'var(--danger)', textAlign: 'center' }}>이 사업단의 예산이 등록되지 않았습니다.</div>}
+              </>
+            ) : (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>수입 내역은 예산 등록 시 자동 집계됩니다.</div>
+            )}
           </div>
         </Card>
 
         <div>
-          <Card title={section === 'expense' ? `지출 내역 — ${tab}` : '수입 내역'} right={<Button variant="ghost" size="sm" icon={<Icons.download/>}>Excel</Button>} padding="0">
+          <Card title={section === 'expense' ? `지출 내역 — ${tab}` : '수입 내역'} right={
+            <Button variant="ghost" size="sm" icon={<Icons.download/>} onClick={handleExcelDownload}>Excel</Button>
+          } padding="0">
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)' }}>로딩 중…</div>
             ) : section === 'expense' ? (
@@ -118,7 +195,13 @@ export function Budget({ tab, setTab }: BudgetProps) {
                       <td style={{ padding: '13px 18px', fontWeight: 600, color: 'var(--ink-900)' }}>{e.item_name}</td>
                       <td className="num" style={{ padding: '13px 18px', textAlign: 'right', fontWeight: 700 }}>{fmt(e.amount)}원</td>
                       <td style={{ padding: '13px 18px', fontSize: 13, color: 'var(--ink-500)' }}>{e.note ?? '—'}</td>
-                      <td style={{ padding: '13px 18px' }}><Button variant="ghost" size="sm">수정</Button></td>
+                      <td style={{ padding: '13px 18px' }}>
+                        <Button variant="ghost" size="sm" onClick={async () => {
+                          if (!confirm('이 지출을 삭제하시겠습니까?')) return;
+                          await api.delete(`/budgets/expenditures/${e.id}`);
+                          refetch();
+                        }}>삭제</Button>
+                      </td>
                     </tr>
                   ))}
                   {expenditures.length > 0 && (
@@ -148,6 +231,10 @@ export function Budget({ tab, setTab }: BudgetProps) {
     </>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 13, fontWeight: 700, color: 'var(--ink-700)', marginBottom: 6,
+};
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 12px', border: '1.5px solid var(--line)',

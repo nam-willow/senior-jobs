@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { TabType } from '../types';
+import { useBusinessUnits } from '../hooks/useBusinessUnits';
+import { useAppStore } from '../stores/appStore';
+import { api } from '../lib/api';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { AlertBox } from '../components/layout/AlertBox';
 import { Card } from '../components/layout/Card';
@@ -14,25 +17,93 @@ interface WorkLogProps {
   month: number;
 }
 
-const CASES = [
-  { r: 10, n: 45, note: '1~6월 기본' },
-  { r: 11, n: 23, note: '이월 반영' },
-  { r: 12, n: 18, note: '이월 반영' },
-  { r: 14, n: 5,  note: '소진 임박' },
-];
+interface CaseRow {
+  row_count: number;
+  count: number;
+}
+
+interface PrintListData {
+  seniors: { senior_id: string; name: string; workplace: string; row_count: number; business_unit_name: string }[];
+  case_summary: Record<string, number>;
+  total_pages: number;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
-  const [step, setStep] = useState(1);
-  const [format, setFormat] = useState<'excel'|'print'|null>(null);
-  const [selectedRows, setSelectedRows] = useState(10);
+  const storeYear = useAppStore((s) => s.year);
+  const { units, byTab } = useBusinessUnits(storeYear);
+  const bu = byTab(tab);
 
-  const total = CASES.reduce((s, c) => s + c.n, 0);
-  const totalSheets = CASES.reduce((s, c) => s + c.n, 0);
+  const [step, setStep] = useState(1);
+  const [format, setFormat] = useState<'excel' | 'print' | null>(null);
+  const [selectedRows, setSelectedRows] = useState<number | null>(null);
+  const [printData, setPrintData] = useState<PrintListData | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const availableTabs = units.map((u) => {
+    if (u.type === 'public_benefit') return '공익활동형' as TabType;
+    if (u.type === 'social_service') return '사회서비스형' as TabType;
+    return '시장형' as TabType;
+  });
+
+  useEffect(() => {
+    if (step !== 1) return;
+    setLoadingData(true);
+    const params: Record<string, string | number> = { year, month };
+    if (bu?.id) params.business_unit_id = bu.id;
+    api.get<PrintListData>(`/work-logs/print-list/${year}/${month}`, { params })
+      .then((r) => {
+        setPrintData(r.data);
+        const keys = Object.keys(r.data.case_summary);
+        if (keys.length > 0) setSelectedRows(parseInt(keys[0].replace('행', ''), 10));
+      })
+      .catch(() => setPrintData(null))
+      .finally(() => setLoadingData(false));
+  }, [year, month, bu?.id, step]);
+
+  const cases: CaseRow[] = printData
+    ? Object.entries(printData.case_summary).map(([k, v]) => ({ row_count: parseInt(k.replace('행', ''), 10), count: v }))
+    : [];
+
+  const total = cases.reduce((s, c) => s + c.count, 0);
+  const totalSheets = total;
 
   const goBack = () => {
     if (step === 1) return;
     if (step === 3) { setStep(1); setFormat(null); return; }
     setStep(step - 1);
+  };
+
+  const handleExcelDownload = async () => {
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ year: String(year), month: String(month) });
+      if (bu?.id) params.append('business_unit_id', bu.id);
+      const token = localStorage.getItem('access_token') ?? '';
+      const r = await fetch(`/api/v1/work-logs/export/excel/${year}/${month}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error('download failed');
+      const blob = await r.blob();
+      downloadBlob(blob, `work_log_${year}_${String(month).padStart(2, '0')}.xlsx`);
+    } catch {
+      alert('Excel 다운로드에 실패했습니다.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   const STEPS = [
@@ -62,7 +133,7 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
         ))}
       </div>
 
-      <UnitTabBar tab={tab} onChange={setTab} right={
+      <UnitTabBar tab={tab} onChange={setTab} availableTabs={availableTabs} right={
         step !== 1 ? <Button variant="ghost" size="sm" onClick={goBack}>← 이전 단계</Button> : undefined
       }/>
 
@@ -70,46 +141,48 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
       {step === 1 && (
         <>
           <AlertBox tone="info">
-            이번 달 어르신 전체 목록이 자동 생성됐습니다. 출력 장수는 행 수 케이스별로 자동 집계되며, 필요 시 직접 수정할 수 있습니다.
+            이번 달 어르신 전체 목록이 자동 생성됐습니다. 출력 장수는 행 수 케이스별로 자동 집계됩니다.
           </AlertBox>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 20 }}>
             <Card title="행수별 집계" padding="0">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
-                <thead>
-                  <tr style={{ background: 'var(--cream-50)', textAlign: 'left' }}>
-                    {['행수', '어르신 수', '출력 장수', '비고'].map((h) => (
-                      <th key={h} style={{ padding: '12px 18px', fontWeight: 700, color: 'var(--ink-500)', fontSize: 13 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {CASES.map((c) => (
-                    <tr key={c.r} onClick={() => setSelectedRows(c.r)} style={{ borderTop: '1px solid var(--line-soft)', cursor: 'pointer', background: selectedRows === c.r ? 'var(--green-50)' : '#fff' }}>
-                      <td style={{ padding: '14px 18px' }}>
-                        <Chip tone={selectedRows === c.r ? 'green' : 'neutral'} size="sm">{c.r}행</Chip>
-                      </td>
-                      <td className="num" style={{ padding: '14px 18px', fontWeight: 700, color: 'var(--ink-900)' }}>{c.n}명</td>
-                      <td style={{ padding: '14px 18px' }}>
-                        <input defaultValue={c.n} style={{ width: 70, padding: '8px 12px', border: '1.5px solid var(--line)', borderRadius: 8, textAlign: 'center', fontSize: 14, outline: 'none' }}/>
-                        <span style={{ fontSize: 13, color: 'var(--ink-500)', marginLeft: 6 }}>장</span>
-                      </td>
-                      <td style={{ padding: '14px 18px', fontSize: 13, color: 'var(--ink-500)' }}>{c.note}</td>
+              {loadingData ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)' }}>로딩 중…</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--cream-50)', textAlign: 'left' }}>
+                      {['행수', '어르신 수', '출력 장수'].map((h) => (
+                        <th key={h} style={{ padding: '12px 18px', fontWeight: 700, color: 'var(--ink-500)', fontSize: 13 }}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                  <tr style={{ background: 'var(--cream-50)', borderTop: '2px solid var(--line)', fontWeight: 800 }}>
-                    <td style={{ padding: '14px 18px' }}>합계</td>
-                    <td className="num" style={{ padding: '14px 18px', color: 'var(--green-700)' }}>{total}명</td>
-                    <td className="num" style={{ padding: '14px 18px', color: 'var(--green-700)' }}>{totalSheets}장</td>
-                    <td/>
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {cases.length === 0 && (
+                      <tr><td colSpan={3} style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)' }}>데이터가 없습니다.</td></tr>
+                    )}
+                    {cases.map((c) => (
+                      <tr key={c.row_count} onClick={() => setSelectedRows(c.row_count)} style={{ borderTop: '1px solid var(--line-soft)', cursor: 'pointer', background: selectedRows === c.row_count ? 'var(--green-50)' : '#fff' }}>
+                        <td style={{ padding: '14px 18px' }}>
+                          <Chip tone={selectedRows === c.row_count ? 'green' : 'neutral'} size="sm">{c.row_count}행</Chip>
+                        </td>
+                        <td className="num" style={{ padding: '14px 18px', fontWeight: 700, color: 'var(--ink-900)' }}>{c.count}명</td>
+                        <td className="num" style={{ padding: '14px 18px', fontWeight: 600 }}>{c.count}장</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: 'var(--cream-50)', borderTop: '2px solid var(--line)', fontWeight: 800 }}>
+                      <td style={{ padding: '14px 18px' }}>합계</td>
+                      <td className="num" style={{ padding: '14px 18px', color: 'var(--green-700)' }}>{total}명</td>
+                      <td className="num" style={{ padding: '14px 18px', color: 'var(--green-700)' }}>{totalSheets}장</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
             </Card>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink-900)' }}>📋 근무일지 미리보기 ({selectedRows}행)</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink-900)' }}>📋 근무일지 미리보기 ({selectedRows ?? '—'}행)</div>
                 <Chip tone="green" size="sm">A4 가로</Chip>
               </div>
               <div style={{ background: '#fff', border: '2px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
@@ -125,7 +198,7 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.from({ length: selectedRows }).map((_, i) => (
+                    {Array.from({ length: selectedRows ?? 10 }).map((_, i) => (
                       <tr key={i}>
                         <td style={{ padding: '9px 6px', textAlign: 'center', color: 'var(--ink-500)', border: '1px solid var(--line)' }}>/</td>
                         <td style={{ padding: '9px 6px', border: '1px solid var(--line)' }}></td>
@@ -137,9 +210,6 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
                     ))}
                   </tbody>
                 </table>
-                <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--ink-500)', borderTop: '1px solid var(--line)', textAlign: 'right' }}>
-                  ※ 날짜·성함·근무장소는 어르신이 직접 기재 / 서명란 "(인)" = 위조 방지 자동 인쇄
-                </div>
               </div>
               <AlertBox tone="warn">
                 기관서명·담당사복사 <strong>"(인)"</strong> 표기는 위조 방지를 위해 자동 인쇄됩니다.
@@ -148,7 +218,7 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
-            <Button variant="ghost" size="md">취소</Button>
+            <Button variant="ghost" size="md" onClick={() => setStep(1)}>취소</Button>
             <Button variant="primary" size="md" icon={<Icons.arrow/>} onClick={() => setStep(2)}>출력하기 ({totalSheets}장)</Button>
           </div>
         </>
@@ -159,7 +229,7 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
         <div style={{ maxWidth: 760, margin: '20px auto 0' }}>
           <h2 style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink-900)', textAlign: 'center', marginBottom: 8 }}>출력 형식을 선택하세요</h2>
           <p style={{ fontSize: 15, color: 'var(--ink-500)', textAlign: 'center', marginBottom: 32 }}>
-            선택 즉시 전체 <strong>{totalSheets}장</strong>이 처리됩니다. (추가 확인 없음)
+            선택 즉시 전체 <strong>{totalSheets}장</strong>이 처리됩니다.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
             {[
@@ -190,36 +260,26 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
             {format === 'excel' ? '📥' : '🖨️'}
           </div>
           <h2 style={{ fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', margin: '0 0 12px' }}>
-            {format === 'excel' ? 'Excel 다운로드 완료' : '인쇄 작업 전송 완료'}
+            {format === 'excel' ? 'Excel 다운로드' : '인쇄'}
           </h2>
           <p style={{ fontSize: 16, color: 'var(--ink-500)', lineHeight: 1.6, marginBottom: 32 }}>
             {format === 'excel'
-              ? <>worklog_{year}_{month}.xlsx · 전체 <strong>{totalSheets}명</strong> 어르신 시트 포함</>
-              : <>프린터로 전체 <strong>{totalSheets}장</strong>이 전송됐습니다.</>
+              ? <>work_log_{year}_{String(month).padStart(2,'0')}.xlsx · 전체 <strong>{totalSheets}명</strong> 어르신 시트 포함</>
+              : <>브라우저 인쇄 창이 열립니다. 전체 <strong>{totalSheets}장</strong>을 인쇄합니다.</>
             }
           </p>
-          <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, padding: '22px 24px', textAlign: 'left' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-500)', marginBottom: 12 }}>출력 요약</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {[
-                ['사업단', tab],
-                ['출력 형식', format === 'excel' ? 'Excel (.xlsx)' : '프린터 인쇄'],
-                ['연월', `${year}년 ${month}월`],
-                ['총 인원/장수', `${total}명 / ${totalSheets}장`],
-              ].map(([l, v]) => (
-                <div key={l} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '8px 0', borderBottom: '1px solid var(--line-soft)' }}>
-                  <span style={{ color: 'var(--ink-500)' }}>{l}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--ink-900)' }}>{v}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
-              📁 document_snapshots에 자동 저장됨
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 28 }}>
-            <Button variant="secondary" size="md" onClick={() => setStep(1)}>다시 출력</Button>
-            <Button variant="primary" size="md">대시보드로 →</Button>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
+            <Button variant="secondary" size="md" onClick={() => setStep(1)}>← 돌아가기</Button>
+            {format === 'excel' ? (
+              <Button variant="primary" size="md" icon={<Icons.download/>} onClick={handleExcelDownload}
+                disabled={downloading}>
+                {downloading ? '다운로드 중…' : 'Excel 다운로드'}
+              </Button>
+            ) : (
+              <Button variant="primary" size="md" icon={<Icons.doc/>} onClick={handlePrint}>
+                인쇄 창 열기
+              </Button>
+            )}
           </div>
         </div>
       )}

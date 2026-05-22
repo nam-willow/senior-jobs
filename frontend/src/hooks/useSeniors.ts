@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
 export interface ApiSenior {
@@ -18,7 +18,7 @@ export function useSeniors(businessUnitId: string | null) {
   const [seniors, setSeniors] = useState<ApiSenior[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetch = useCallback(() => {
     if (!businessUnitId) { setSeniors([]); return; }
     setLoading(true);
     api.get<{ items: ApiSenior[] }>('/seniors/', {
@@ -29,5 +29,7 @@ export function useSeniors(businessUnitId: string | null) {
       .finally(() => setLoading(false));
   }, [businessUnitId]);
 
-  return { seniors, loading };
+  useEffect(() => { fetch(); }, [fetch]);
+
+  return { seniors, loading, refetch: fetch };
 }

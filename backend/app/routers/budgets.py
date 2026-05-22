@@ -3,10 +3,13 @@ import uuid
 from typing_extensions import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import get_tenant_db
 from app.core.permissions import CurrentUser, require_permission
+from app.models.annual_budget import AnnualBudget
+from app.models.business_unit import BusinessUnit
 from app.schemas.budget import (
     AnnualBudgetCreate,
     AnnualBudgetResponse,
@@ -22,6 +25,27 @@ router = APIRouter(prefix="/budgets", tags=["budgets"])
 
 # Static-prefix routes MUST come before parameterised two-segment routes
 # to avoid Starlette matching /expenditures/{id} as /{business_unit_id}/{year}.
+
+@router.get("/check")
+async def check_budget(
+    year: int,
+    current_user: Annotated[CurrentUser, Depends(require_permission("MANAGE_BUDGET"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+):
+    """Returns {"has_budget": bool} — true if the tenant has at least one budget for the given year."""
+    tenant_uuid = uuid.UUID(current_user.tenant_id)
+    result = await db.execute(
+        select(func.count()).select_from(AnnualBudget).join(
+            BusinessUnit, AnnualBudget.business_unit_id == BusinessUnit.id
+        ).where(
+            AnnualBudget.tenant_id == tenant_uuid,
+            AnnualBudget.year == year,
+            BusinessUnit.is_active.is_(True),
+        )
+    )
+    count = result.scalar_one()
+    return {"has_budget": count > 0}
+
 
 @router.get("/expenditures/{budget_id}", response_model=PaginatedResponse[ExpenditureResponse])
 async def list_expenditures(

@@ -6,15 +6,18 @@ interface UnitTabBarProps {
   tab: TabType;
   onChange: (t: TabType) => void;
   right?: ReactNode;
+  availableTabs?: TabType[];
 }
 
-export function UnitTabBar({ tab, onChange, right }: UnitTabBarProps) {
+export function UnitTabBar({ tab, onChange, right, availableTabs }: UnitTabBarProps) {
+  const visibleTabs = availableTabs && availableTabs.length > 0 ? availableTabs : TABS;
+
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-end',
       borderBottom: '1.5px solid var(--line)', marginBottom: 24,
     }}>
-      {TABS.map((t) => (
+      {visibleTabs.map((t) => (
         <div key={t} onClick={() => onChange(t)} style={{
           padding: '14px 22px', fontSize: 16, fontWeight: tab === t ? 700 : 500,
           cursor: 'pointer', color: tab === t ? TAB_TONE[t].color : 'var(--ink-500)',

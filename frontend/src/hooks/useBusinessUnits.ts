@@ -26,15 +26,18 @@ const TYPE_REVERSE: Record<string, TabType> = {
 
 export function useBusinessUnits(year: number) {
   const [units, setUnits] = useState<BusinessUnit[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     api.get<{ items: BusinessUnit[] }>('/business-units/', { params: { year } })
       .then((r) => setUnits(r.data.items))
-      .catch(() => setUnits([]));
+      .catch(() => setUnits([]))
+      .finally(() => setLoading(false));
   }, [year]);
 
   const byTab = (tab: TabType) => units.find((u) => u.type === TYPE_MAP[tab]) ?? null;
   const tabOf = (type: string): TabType => TYPE_REVERSE[type] ?? '공익활동형';
 
-  return { units, byTab, tabOf };
+  return { units, loading, byTab, tabOf };
 }

@@ -4,6 +4,7 @@ import { useAppStore } from '../stores/appStore';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useSeniors, type ApiSenior } from '../hooks/useSeniors';
 import { useConsultationLogs } from '../hooks/useConsultationLogs';
+import { api } from '../lib/api';
 import { TAB_TONE } from '../data/mockData';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { BudgetStrip } from '../components/layout/BudgetStrip';
@@ -29,11 +30,18 @@ function birthDisplay(d: string) {
 
 export function Seniors({ tab, setTab, selectedSenior: _selectedSenior, setSelectedSenior, onNavigatePage, onFocusSenior }: SeniorsProps) {
   const year = useAppStore((s) => s.year);
-  const { byTab } = useBusinessUnits(year);
+  const { units, byTab } = useBusinessUnits(year);
   const bu = byTab(tab);
-  const { seniors, loading } = useSeniors(bu?.id ?? null);
+  const { seniors, loading, refetch } = useSeniors(bu?.id ?? null);
   const [q, setQ] = useState('');
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+
+  const availableTabs = units.map((u) => {
+    if (u.type === 'public_benefit') return '공익활동형' as TabType;
+    if (u.type === 'social_service') return '사회서비스형' as TabType;
+    return '시장형' as TabType;
+  });
 
   const filtered = seniors.filter((s) =>
     !q || s.name.includes(q) || s.workplace.includes(q)
@@ -48,10 +56,10 @@ export function Seniors({ tab, setTab, selectedSenior: _selectedSenior, setSelec
 
   return (
     <>
-      <UnitTabBar tab={tab} onChange={setTab} right={
+      <UnitTabBar tab={tab} onChange={setTab} availableTabs={availableTabs} right={
         <>
           <Button variant="secondary" size="sm" icon={<Icons.download/>}>Excel</Button>
-          <Button variant="primary" size="sm" icon={<Icons.plus/>}>어르신 등록</Button>
+          <Button variant="primary" size="sm" icon={<Icons.plus/>} onClick={() => setShowRegisterModal(true)}>어르신 등록</Button>
         </>
       }/>
 
@@ -124,7 +132,89 @@ export function Seniors({ tab, setTab, selectedSenior: _selectedSenior, setSelec
           onFocusSenior={onFocusSenior}
         />
       )}
+
+      {showRegisterModal && bu && (
+        <SeniorRegisterModal
+          businessUnitId={bu.id}
+          tab={tab}
+          onClose={() => setShowRegisterModal(false)}
+          onCreated={() => { setShowRegisterModal(false); refetch(); }}
+        />
+      )}
     </>
+  );
+}
+
+function SeniorRegisterModal({ businessUnitId, tab, onClose, onCreated }: {
+  businessUnitId: string;
+  tab: TabType;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [workplace, setWorkplace] = useState('');
+  const [hourlyWage, setHourlyWage] = useState('4000');
+  const [sessionHours, setSessionHours] = useState('3');
+  const [allocatedHours, setAllocatedHours] = useState('300');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !birthDate) { setError('이름과 생년월일은 필수입니다.'); return; }
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.post('/seniors/', {
+        business_unit_id: businessUnitId,
+        name: name.trim(),
+        birth_date: birthDate,
+        workplace: workplace.trim() || null,
+        hourly_wage: parseInt(hourlyWage, 10) || 4000,
+        default_session_hours: parseInt(sessionHours, 10) || 3,
+        allocated_hours: parseInt(allocatedHours, 10) || 300,
+        notes: notes.trim() || null,
+      });
+      onCreated();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg ?? '등록 중 오류가 발생했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} width={520}>
+      <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink-900)' }}>어르신 등록 — {tab}</div>
+        <button onClick={onClose} style={{ width: 40, height: 40, borderRadius: 10, border: '1.5px solid var(--line)', background: '#fff', fontSize: 20, cursor: 'pointer', color: 'var(--ink-700)' }}>×</button>
+      </div>
+      <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {[
+          { label: '성명 *', el: <input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 홍길동" style={inp}/> },
+          { label: '생년월일 *', el: <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={inp}/> },
+          { label: '근무장소', el: <input value={workplace} onChange={(e) => setWorkplace(e.target.value)} placeholder="예: 강남구 보건소" style={inp}/> },
+          { label: '시급 (원)', el: <input type="number" value={hourlyWage} onChange={(e) => setHourlyWage(e.target.value)} style={inp}/> },
+          { label: '기본 근무시간/회 (h)', el: <input type="number" value={sessionHours} onChange={(e) => setSessionHours(e.target.value)} style={inp}/> },
+          { label: '연간 배정시간 (h)', el: <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} style={inp}/> },
+          { label: '메모', el: <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="특이사항 등" style={{ ...inp, resize: 'vertical' }}/> },
+        ].map((r) => (
+          <div key={r.label}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-700)', marginBottom: 6 }}>{r.label}</div>
+            {r.el}
+          </div>
+        ))}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <Button variant="ghost" size="md" full onClick={onClose}>취소</Button>
+          <Button variant="primary" size="md" full onClick={handleSubmit} disabled={submitting}>
+            {submitting ? '등록 중…' : '어르신 등록'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -248,3 +338,8 @@ function SeniorDetailModal({ senior, tab, onClose, onNavigatePage, onFocusSenior
   );
 }
 
+const inp: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', border: '1.5px solid var(--line)',
+  borderRadius: 10, fontSize: 14, outline: 'none', background: '#fff', color: 'var(--ink-900)',
+  display: 'block', boxSizing: 'border-box', fontFamily: 'inherit',
+};

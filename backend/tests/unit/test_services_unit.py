@@ -436,10 +436,20 @@ async def test_sv20_list_work_records_no_filter():
     from app.services.work_record_service import list_work_records
 
     tid = str(uuid.uuid4())
-    records = [_make_record(uuid.UUID(tid), uuid.uuid4()) for _ in range(3)]
+    # list_work_records now joins Senior and BusinessUnit — mock returns (rec, senior, bu) tuples
+    recs = [_make_record(uuid.UUID(tid), uuid.uuid4()) for _ in range(3)]
+    # Add __table__.columns so the dict comprehension works
+    for r in recs:
+        col = MagicMock()
+        col.name = "id"
+        r.__table__ = MagicMock()
+        r.__table__.columns = [col]
+    seniors = [_make_senior(uuid.UUID(tid), uuid.uuid4()) for _ in range(3)]
+    bus = [_make_bu(uuid.UUID(tid)) for _ in range(3)]
+    rows = list(zip(recs, seniors, bus))
 
     db = _make_async_db()
-    db.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=records)))))
+    db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=rows)))
 
     result = await list_work_records(db, tid)
     assert len(result) == 3

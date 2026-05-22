@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.business_unit import BusinessUnit
 from app.models.monthly_work_records import MonthlyWorkRecord, WorkRecordStatus
 from app.models.senior import Senior
 from app.schemas.work_record import MONTHLY_MAX_SOFT, WorkRecordCreate, WorkRecordUpdate
@@ -97,9 +98,13 @@ async def list_work_records(
     year: Optional[int] = None,
     month: Optional[int] = None,
     record_status: Optional[str] = None,
-) -> list[MonthlyWorkRecord]:
-    q = select(MonthlyWorkRecord).where(
-        MonthlyWorkRecord.tenant_id == uuid.UUID(tenant_id)
+    business_unit_id: Optional[str] = None,
+) -> list[dict]:
+    q = (
+        select(MonthlyWorkRecord, Senior, BusinessUnit)
+        .join(Senior, MonthlyWorkRecord.senior_id == Senior.id)
+        .join(BusinessUnit, Senior.business_unit_id == BusinessUnit.id)
+        .where(MonthlyWorkRecord.tenant_id == uuid.UUID(tenant_id))
     )
     if senior_id:
         q = q.where(MonthlyWorkRecord.senior_id == uuid.UUID(senior_id))
@@ -109,8 +114,18 @@ async def list_work_records(
         q = q.where(MonthlyWorkRecord.month == month)
     if record_status:
         q = q.where(MonthlyWorkRecord.status == record_status)
+    if business_unit_id:
+        q = q.where(BusinessUnit.id == uuid.UUID(business_unit_id))
     result = await db.execute(q.order_by(MonthlyWorkRecord.year, MonthlyWorkRecord.month))
-    return list(result.scalars().all())
+    rows = result.all()
+    out = []
+    for rec, senior, bu in rows:
+        d = {c.name: getattr(rec, c.name) for c in rec.__table__.columns}
+        d["senior_name"] = senior.name
+        d["business_unit_type"] = bu.type.value
+        d["business_unit_name"] = bu.name
+        out.append(d)
+    return out
 
 
 async def update_work_record(

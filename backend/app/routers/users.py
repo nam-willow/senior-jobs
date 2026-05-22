@@ -15,6 +15,11 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.audit import record_audit
 
+from pydantic import BaseModel
+
+class TransferAdminRequest(BaseModel):
+    target_user_id: uuid.UUID
+
 router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -121,6 +126,89 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.patch("/{user_id}/deactivate", status_code=status.HTTP_204_NO_CONTENT)
+async def deactivate_user(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(require_permission("MANAGE_USERS"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+):
+    """직원 비활성화 (접속 차단). 관리자 본인은 비활성화 불가."""
+    if str(user_id) == current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="본인 계정은 비활성화할 수 없습니다.",
+        )
+    result = await db.execute(
+        select(User).where(
+            User.id == user_id,
+            User.tenant_id == uuid.UUID(current_user.tenant_id),
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 비활성화된 계정입니다.",
+        )
+    user.is_active = False
+    await record_audit(
+        db, tenant_id=current_user.tenant_id, user_id=current_user.user_id,
+        action_type="UPDATE", target_table="users", target_id=str(user_id),
+        after_data={"is_active": False, "reason": "deactivated_by_admin"},
+        ip_address=request.client.host if request.client else "unknown",
+    )
+    await db.commit()
+
+
+@router.post("/transfer-admin", status_code=status.HTTP_204_NO_CONTENT)
+async def transfer_admin(
+    data: TransferAdminRequest,
+    request: Request,
+    current_user: Annotated[CurrentUser, RequireTenantAdmin],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+):
+    """관리자 권한 이전. 기존 관리자 → 일반 직원, 대상 → 관리자."""
+    if str(data.target_user_id) == current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="본인에게 권한을 이전할 수 없습니다.",
+        )
+    result = await db.execute(
+        select(User).where(
+            User.id == data.target_user_id,
+            User.tenant_id == uuid.UUID(current_user.tenant_id),
+            User.is_active.is_(True),
+        )
+    )
+    target = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="대상 직원을 찾을 수 없거나 비활성화된 계정입니다.",
+        )
+
+    # 현재 관리자 → 사회복지사로 강등
+    me_result = await db.execute(
+        select(User).where(User.id == uuid.UUID(current_user.user_id))
+    )
+    me = me_result.scalar_one()
+    me.role = UserRole.SOCIAL_WORKER
+
+    # 대상 → 관리자로 승격
+    target.role = UserRole.TENANT_ADMIN
+
+    await record_audit(
+        db, tenant_id=current_user.tenant_id, user_id=current_user.user_id,
+        action_type="UPDATE", target_table="users", target_id=str(data.target_user_id),
+        after_data={"role": "tenant_admin", "transferred_from": current_user.user_id},
+        ip_address=request.client.host if request.client else "unknown",
+    )
+    await db.commit()
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

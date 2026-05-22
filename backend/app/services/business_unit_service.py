@@ -2,9 +2,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.annual_budget import AnnualBudget
+from app.models.budget_expenditure import BudgetExpenditure
 from app.models.business_unit import BusinessUnit, BusinessUnitType
 from app.schemas.business_unit import BusinessUnitCreate, BusinessUnitUpdate, TYPE_DEFAULTS
 
@@ -96,5 +98,25 @@ async def update_business_unit(
 
 async def delete_business_unit(db: AsyncSession, bu_id: str, tenant_id: str) -> None:
     bu = await get_business_unit(db, bu_id, tenant_id)
+
+    # 이 사업단에 연결된 예산에 지출 내역이 있으면 삭제 불가
+    budget_result = await db.execute(
+        select(AnnualBudget.id).where(AnnualBudget.business_unit_id == uuid.UUID(bu_id))
+    )
+    budget_ids = [row[0] for row in budget_result.all()]
+
+    if budget_ids:
+        exp_count = await db.execute(
+            select(func.count()).select_from(BudgetExpenditure).where(
+                BudgetExpenditure.budget_id.in_(budget_ids),
+                BudgetExpenditure.deleted_at.is_(None),
+            )
+        )
+        if exp_count.scalar_one() > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="지출 내역이 있는 사업단은 삭제할 수 없습니다. 지출 내역을 먼저 정리해주세요.",
+            )
+
     bu.is_active = False
     await db.flush()

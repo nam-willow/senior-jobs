@@ -21,7 +21,7 @@ from app.services import work_record_service
 router = APIRouter(prefix="/work-records", tags=["work-records"])
 
 
-@router.get("/", response_model=PaginatedResponse[WorkRecordResponse])
+@router.get("/")
 async def list_work_records(
     current_user: Annotated[CurrentUser, Depends(require_permission("VIEW_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
@@ -29,9 +29,10 @@ async def list_work_records(
     year: Optional[int] = None,
     month: Optional[int] = None,
     record_status: Optional[str] = None,
+    business_unit_id: Optional[str] = None,
 ):
     items = await work_record_service.list_work_records(
-        db, current_user.tenant_id, senior_id, year, month, record_status
+        db, current_user.tenant_id, senior_id, year, month, record_status, business_unit_id
     )
     return {"items": items, "total": len(items)}
 

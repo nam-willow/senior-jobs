@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
 export interface AnnualBudget {
@@ -26,7 +26,7 @@ export function useBudget(businessUnitId: string | null, year: number) {
   const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetch = useCallback(() => {
     if (!businessUnitId) { setBudget(null); setExpenditures([]); return; }
     setLoading(true);
     api.get<AnnualBudget>(`/budgets/${businessUnitId}/${year}`)
@@ -39,11 +39,13 @@ export function useBudget(businessUnitId: string | null, year: number) {
       .finally(() => setLoading(false));
   }, [businessUnitId, year]);
 
+  useEffect(() => { fetch(); }, [fetch]);
+
   const totalBudget = budget ? budget.total_wage_budget + budget.manager_wage_budget + budget.operation_budget : 0;
   const spentByCategory = (cat: string) => expenditures.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0);
   const totalSpent = expenditures.reduce((s, e) => s + e.amount, 0);
   const remaining = totalBudget - totalSpent;
   const pct = totalBudget > 0 ? Math.round(totalSpent / totalBudget * 100) : 0;
 
-  return { budget, expenditures, loading, totalBudget, totalSpent, remaining, pct, spentByCategory };
+  return { budget, expenditures, loading, totalBudget, totalSpent, remaining, pct, spentByCategory, refetch: fetch };
 }
