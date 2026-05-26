@@ -59,6 +59,64 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
 
   const approvedRecords = records.filter((r) => r.status === 'APPROVED');
 
+  const handlePrint = () => {
+    const totalH = rows.reduce((s, r) => s + r.hours, 0);
+    const totalA = rows.reduce((s, r) => s + r.amount, 0);
+
+    const dataRows = rows.map((r, i) => `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td style="text-align:center;font-weight:bold">${r.name}</td>
+        <td style="text-align:center">${r.birth_date ? r.birth_date.replace(/-/g, '.') : '—'}</td>
+        <td style="text-align:center">${r.hours}h</td>
+        <td style="text-align:right">${r.amount ? r.amount.toLocaleString() + '원' : '—'}</td>
+        <td style="text-align:center"><div style="width:60px;height:24px;border:1px dashed #999;margin:0 auto;line-height:24px;font-size:9pt;color:#999">(인)</div></td>
+      </tr>`
+    ).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="ko"><head>
+  <meta charset="UTF-8">
+  <title>${year}년 ${month}월 급여대장</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'맑은 고딕',sans-serif;font-size:11pt;padding:15mm}
+    h2{text-align:center;font-size:15pt;margin-bottom:18px;font-weight:bold}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #000;padding:7px 10px}
+    thead th{background:#DAEEF3;text-align:center;font-weight:bold}
+    tfoot td{background:#f5f5f5;font-weight:bold}
+    .info{margin-bottom:10px;font-size:10pt;color:#555;text-align:center}
+    @media print{body{padding:10mm}}
+  </style>
+</head>
+<body>
+  <h2>${year}년 ${month}월 노인일자리 급여대장</h2>
+  <p class="info">${tab} 사업단 &nbsp;|&nbsp; 승인(APPROVED) 기준</p>
+  <table>
+    <thead>
+      <tr><th>번호</th><th>이름</th><th>생년월일</th><th>근무시간</th><th>지급금액</th><th>서명</th></tr>
+    </thead>
+    <tbody>${dataRows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="text-align:center">합계</td>
+        <td style="text-align:center">${totalH}h</td>
+        <td style="text-align:right">${totalA.toLocaleString()}원</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+</body></html>`;
+
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해주세요.'); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
+  };
+
   const rows = seniors.map((s) => {
     const rec = approvedRecords.find((r) => r.senior_id === s.id);
     return {
@@ -81,7 +139,7 @@ export function Salary({ tab, setTab, year, month }: SalaryProps) {
           <Button variant="secondary" size="sm" icon={<Icons.download/>}
             onClick={() => downloadSalary(year, month, bu?.id ?? null, 'pdf')}>PDF</Button>
           <Button variant="primary" size="sm" icon={<Icons.doc/>}
-            onClick={() => window.print()}>인쇄</Button>
+            onClick={handlePrint}>인쇄</Button>
         </>
       }/>
 

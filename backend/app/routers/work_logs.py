@@ -100,13 +100,8 @@ async def export_work_log_excel(
 ):
     """근무일지 전체 어르신 Excel 단건 동기 다운로드. 어르신 1인 = 1시트."""
     q = (
-        select(Senior, MonthlyWorkRecord)
-        .outerjoin(
-            MonthlyWorkRecord,
-            (MonthlyWorkRecord.senior_id == Senior.id)
-            & (MonthlyWorkRecord.year == year)
-            & (MonthlyWorkRecord.month == month),
-        )
+        select(Senior, BusinessUnit)
+        .join(BusinessUnit, Senior.business_unit_id == BusinessUnit.id)
         .where(Senior.tenant_id == uuid.UUID(current_user.tenant_id))
         .order_by(Senior.name)
     )
@@ -117,16 +112,29 @@ async def export_work_log_excel(
     rows = result.all()
 
     seniors_data = []
-    for senior, record in rows:
-        row_entries = []
-        if record:
-            for day in range(1, record.worked_days + 1):
-                row_entries.append({"date": f"{year}/{month:02d}/{day:02d}", "hours": ""})
-        seniors_data.append({
-            "name": senior.name,
-            "workplace": senior.workplace or "",
-            "rows": row_entries,
-        })
+    with get_sync_db() as sync_db:
+        for senior, bu in rows:
+            try:
+                row_count = calculate_monthly_rows(
+                    db=sync_db,
+                    senior_id=str(senior.id),
+                    year=year,
+                    month=month,
+                    business_unit_type=bu.type.value,
+                    monthly_default_hours=bu.monthly_default_hours,
+                    monthly_max_hours=bu.monthly_max_hours,
+                    total_allocated_hours=senior.allocated_hours,
+                    session_hours=senior.default_session_hours,
+                    carry_over_enabled=bu.carry_over_enabled,
+                )
+            except (ValueError, Exception):
+                row_count = 10
+
+            seniors_data.append({
+                "name": senior.name,
+                "workplace": senior.workplace or "",
+                "rows": [{"date": "", "hours": ""} for _ in range(row_count)],
+            })
 
     file_bytes = excel_generator.generate_work_log_excel(year, month, seniors_data)
     filename = f"work_log_{year}_{month:02d}.xlsx"

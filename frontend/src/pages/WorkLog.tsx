@@ -103,7 +103,74 @@ export function WorkLog({ tab, setTab, year, month }: WorkLogProps) {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!printData || printData.seniors.length === 0) {
+      alert('출력할 어르신 데이터가 없습니다.');
+      return;
+    }
+
+    const pages = printData.seniors.map((s, idx) => {
+      const emptyRows = Array.from({ length: s.row_count }, () =>
+        `<tr>
+          <td></td>
+          <td style="text-align:center">${s.name}</td>
+          <td>${s.workplace}</td>
+          <td style="text-align:center"></td>
+          <td style="text-align:center">(인)</td>
+          <td style="text-align:center">(인)</td>
+        </tr>`
+      ).join('');
+
+      const isLast = idx === printData.seniors.length - 1;
+      return `<div class="page"${isLast ? '' : ' style="page-break-after:always"'}>
+        <table>
+          <colgroup>
+            <col style="width:12%"><col style="width:12%"><col style="width:36%">
+            <col style="width:12%"><col style="width:14%"><col style="width:14%">
+          </colgroup>
+          <thead>
+            <tr><th colspan="6" class="title">${year}년도 노인일자리 근무일지</th></tr>
+            <tr>
+              <th colspan="2" class="info">성명: ${s.name}</th>
+              <th colspan="4" class="info">근무장소: ${s.workplace || ''}</th>
+            </tr>
+            <tr class="hdr">
+              <th>날짜</th><th>성명</th><th>근무장소</th>
+              <th>일한시간</th><th>담당자 (인)</th><th>사회복지사 (인)</th>
+            </tr>
+          </thead>
+          <tbody>${emptyRows}</tbody>
+        </table>
+        <div class="footer">어르신 서명: _________________ &nbsp;&nbsp;&nbsp; 담당자 서명: _________________</div>
+      </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="ko"><head>
+  <meta charset="UTF-8">
+  <title>${year}년 ${month}월 근무일지</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'맑은 고딕',sans-serif;font-size:11pt}
+    .page{padding:12mm 15mm}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #000;padding:5px 7px;text-align:left}
+    .title{text-align:center;font-size:14pt;font-weight:bold;padding:9px}
+    .info{text-align:center;font-size:10pt;background:#f2f2f2;font-weight:normal}
+    .hdr th{background:#DAEEF3;text-align:center;font-weight:bold}
+    tbody td{height:26px}
+    .footer{margin-top:16px;font-size:10pt;color:#444;text-align:right}
+    @media print{.page{padding:8mm 12mm}}
+  </style>
+</head>
+<body>${pages}</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해주세요.'); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
   };
 
   const STEPS = [
