@@ -21,15 +21,15 @@ export interface Expenditure {
   note: string | null;
 }
 
-export function useBudget(businessUnitId: string | null, year: number) {
+export function useBudget(buType: string | null, year: number) {
   const [budget, setBudget] = useState<AnnualBudget | null>(null);
   const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetch = useCallback(() => {
-    if (!businessUnitId) { setBudget(null); setExpenditures([]); return; }
+    if (!buType) { setBudget(null); setExpenditures([]); return; }
     setLoading(true);
-    api.get<AnnualBudget>(`/budgets/${businessUnitId}/${year}`)
+    api.get<AnnualBudget>(`/budgets/by-type/${buType}/${year}`)
       .then(async (r) => {
         setBudget(r.data);
         const exps = await api.get<{ items: Expenditure[] }>(`/budgets/expenditures/${r.data.id}`);
@@ -37,7 +37,7 @@ export function useBudget(businessUnitId: string | null, year: number) {
       })
       .catch(() => { setBudget(null); setExpenditures([]); })
       .finally(() => setLoading(false));
-  }, [businessUnitId, year]);
+  }, [buType, year]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

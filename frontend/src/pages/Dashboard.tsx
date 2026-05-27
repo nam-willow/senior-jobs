@@ -2,12 +2,15 @@ import { useAppStore } from '../stores/appStore';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useAlerts } from '../hooks/useAlerts';
 import { useMonthlyHours } from '../hooks/useMonthlyHours';
+import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import type { PageType, TabType } from '../types';
 import { TABS, TAB_TONE, fmt, won } from '../data/mockData';
 import { Card } from '../components/layout/Card';
 import { Chip } from '../components/shared/Chip';
 import { Donut } from '../components/shared/Donut';
 import { Progress } from '../components/shared/Progress';
+import { Button } from '../components/shared/Button';
+import { Icons } from '../components/shared/Icons';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -34,6 +37,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const { data: summary, loading: summaryLoading } = useDashboardSummary(year);
   const { alerts, loading: alertsLoading } = useAlerts(year);
   const { monthly, loading: monthlyLoading } = useMonthlyHours(year);
+  const { units, loading: unitsLoading } = useBusinessUnits(year);
 
   const totalSeniors = summary
     ? summary.summary.reduce((s, b) => s + b.senior_count, 0)
@@ -45,8 +49,56 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     : 0;
   const noConsultAlerts = alerts.filter((a) => a.id.startsWith('consult_'));
 
+  // 등록 유도 배너 판단
+  const dataReady = !summaryLoading && !unitsLoading;
+  const hasNoUnits = dataReady && units.length === 0;
+  const hasNoBudget = dataReady && !hasNoUnits &&
+    summary?.summary.every((s) => s.total_budget === 0);
+
   return (
     <>
+      {/* ─── 등록 유도 배너 ───────────────────────────── */}
+      {hasNoUnits && (
+        <div style={{
+          background: 'linear-gradient(135deg, var(--green-50) 0%, #fff 100%)',
+          border: '1.5px solid var(--green-200)', borderRadius: 18,
+          padding: '28px 32px', marginBottom: 22,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20,
+        }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', marginBottom: 6 }}>
+              {year}년도 사업단이 등록되지 않았습니다.
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--ink-500)' }}>
+              사업단을 먼저 등록하면 어르신 관리, 근무 기록, 사업비 현황을 모두 사용할 수 있습니다.
+            </div>
+          </div>
+          <Button variant="primary" size="md" icon={<Icons.plus/>} onClick={() => onNavigate('settings')}>
+            사업단 등록하기
+          </Button>
+        </div>
+      )}
+      {hasNoBudget && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FFF8F0 0%, #fff 100%)',
+          border: '1.5px solid var(--warm-soft)', borderRadius: 18,
+          padding: '28px 32px', marginBottom: 22,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20,
+        }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', marginBottom: 6 }}>
+              {year}년도 사업비가 등록되지 않았습니다.
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--ink-500)' }}>
+              연간 예산을 등록하면 사업비 집행 현황과 집행률을 실시간으로 확인할 수 있습니다.
+            </div>
+          </div>
+          <Button variant="secondary" size="md" icon={<Icons.arrow/>} onClick={() => onNavigate('budget')}>
+            사업비 등록하기
+          </Button>
+        </div>
+      )}
+
       {/* ─── KPI row ─────────────────────────────── */}
       <div className="g4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
         {[
@@ -104,7 +156,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
                 <Donut value={pct} color={tone.color} size={100} label={`${pct}%`}/>
                 <div style={{ flex: 1 }}>
-                  {lines.map((line) => (
+                  {lines.length > 0 ? lines.map((line) => (
                     <div key={line.l} style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-500)', marginBottom: 4 }}>
                         <span>{line.l}</span>
@@ -112,7 +164,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       </div>
                       <Progress value={line.pct} color={line.total === 0 ? 'var(--line)' : tone.color} height={6}/>
                     </div>
-                  ))}
+                  )) : (
+                    <div style={{ fontSize: 13, color: 'var(--ink-400)', textAlign: 'center', padding: '12px 0' }}>
+                      미등록
+                    </div>
+                  )}
                   <div className="num" style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 6 }}>
                     잔액 <strong style={{ color: tone.color }}>{won(apiData?.remaining ?? 0)}</strong>
                   </div>

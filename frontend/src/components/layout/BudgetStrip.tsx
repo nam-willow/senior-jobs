@@ -14,7 +14,7 @@ export function BudgetStrip({ tab }: BudgetStripProps) {
   const year = useAppStore((s) => s.year);
   const { byTab } = useBusinessUnits(year);
   const bu = byTab(tab);
-  const { budget, spentByCategory, loading } = useBudget(bu?.id ?? null, year);
+  const { budget, spentByCategory, loading } = useBudget(bu?.type ?? null, year);
   const color = TAB_TONE[tab].color;
 
   const lines = [
