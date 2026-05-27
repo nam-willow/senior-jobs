@@ -46,6 +46,16 @@ async def get_summary(db: AsyncSession, tenant_id: str, year: int) -> dict:
         senior_count = 0
 
         if bu_ids:
+            # 실제 어르신 수 (Senior 테이블 기준)
+            sc_result = await db.execute(
+                select(func.count(Senior.id)).where(
+                    Senior.tenant_id == uuid.UUID(tenant_id),
+                    Senior.business_unit_id.in_(bu_ids),
+                    Senior.is_active.is_(True),
+                )
+            )
+            senior_count = int(sc_result.scalar() or 0)
+
             # 예산 합계
             ab_result = await db.execute(
                 select(AnnualBudget).where(
@@ -58,7 +68,6 @@ async def get_summary(db: AsyncSession, tenant_id: str, year: int) -> dict:
             wage_budget = sum(b.total_wage_budget for b in budgets)
             mgr_budget = sum(b.manager_wage_budget for b in budgets)
             op_budget = sum(b.operation_budget for b in budgets)
-            senior_count = sum(b.senior_count for b in budgets)
             total_budget = wage_budget + mgr_budget + op_budget
 
             budget_ids = [b.id for b in budgets]

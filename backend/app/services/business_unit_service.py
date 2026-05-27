@@ -64,11 +64,16 @@ async def get_business_unit(
 
 
 async def list_business_units(
-    db: AsyncSession, tenant_id: str, type_filter: str | None = None
+    db: AsyncSession, tenant_id: str, type_filter: str | None = None, year: int | None = None
 ) -> list[BusinessUnit]:
-    q = select(BusinessUnit).where(BusinessUnit.tenant_id == uuid.UUID(tenant_id))
+    q = select(BusinessUnit).where(
+        BusinessUnit.tenant_id == uuid.UUID(tenant_id),
+        BusinessUnit.is_active.is_(True),
+    )
     if type_filter:
         q = q.where(BusinessUnit.type == type_filter)
+    if year:
+        q = q.where(BusinessUnit.year == year)
     result = await db.execute(q.order_by(BusinessUnit.created_at.desc()))
     return list(result.scalars().all())
 
@@ -108,7 +113,7 @@ async def delete_business_unit(db: AsyncSession, bu_id: str, tenant_id: str) -> 
     if budget_ids:
         exp_count = await db.execute(
             select(func.count()).select_from(BudgetExpenditure).where(
-                BudgetExpenditure.budget_id.in_(budget_ids),
+                BudgetExpenditure.annual_budget_id.in_(budget_ids),
                 BudgetExpenditure.deleted_at.is_(None),
             )
         )

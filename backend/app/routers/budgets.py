@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from typing_extensions import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +85,19 @@ async def delete_expenditure(
         ip_address=request.client.host if request.client else "unknown",
     )
     await db.commit()
+
+
+@router.get("/by-type/{bu_type}/{year}", response_model=AnnualBudgetResponse)
+async def get_budget_by_type(
+    bu_type: str,
+    year: int,
+    current_user: Annotated[CurrentUser, Depends(require_permission("MANAGE_BUDGET"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+):
+    budget = await budget_service.get_budget_by_type(db, current_user.tenant_id, bu_type, year)
+    if budget is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return budget
 
 
 @router.get("/{business_unit_id}/{year}", response_model=AnnualBudgetResponse)

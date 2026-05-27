@@ -38,6 +38,23 @@ async def create_budget(
     return budget
 
 
+async def get_budget_by_type(
+    db: AsyncSession, tenant_id: str, bu_type: str, year: int
+) -> AnnualBudget | None:
+    from app.models.business_unit import BusinessUnit, BusinessUnitType
+    result = await db.execute(
+        select(AnnualBudget).join(
+            BusinessUnit, AnnualBudget.business_unit_id == BusinessUnit.id
+        ).where(
+            AnnualBudget.tenant_id == uuid.UUID(tenant_id),
+            AnnualBudget.year == year,
+            BusinessUnit.type == BusinessUnitType(bu_type),
+            BusinessUnit.is_active.is_(True),
+        )
+    )
+    return result.scalars().first()
+
+
 async def get_budget(
     db: AsyncSession, business_unit_id: str, year: int, tenant_id: str
 ) -> AnnualBudget:

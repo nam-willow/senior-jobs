@@ -20,8 +20,9 @@ async def list_business_units(
     current_user: Annotated[CurrentUser, Depends(require_permission("VIEW_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     type: Optional[str] = None,
+    year: Optional[int] = None,
 ):
-    items = await business_unit_service.list_business_units(db, current_user.tenant_id, type)
+    items = await business_unit_service.list_business_units(db, current_user.tenant_id, type, year)
     return {"items": items, "total": len(items)}
 
 

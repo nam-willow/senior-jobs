@@ -247,21 +247,23 @@ async def test_sc19_dashboard_summary_with_budget():
         tenant_id=uuid.uuid4(),
     )
 
-    call_count = 0
+    call_count = [0]
 
     async def fake_execute(query):
-        nonlocal call_count
         mock_result = MagicMock()
-        call_count += 1
-        # First execute per BU type: business units
-        # Second: annual budgets
-        # Third/Fourth/Fifth: expenditures per category
-        if call_count % 5 == 1:
+        call_count[0] += 1
+        c = call_count[0]
+        # PUBLIC_BENEFIT has data: BU(1) senior_count(2) budget(3) exp×3(4,5,6)
+        # SOCIAL_SERVICE: BU only (7), MARKET: BU only (8)
+        if c == 1:    # PUBLIC_BENEFIT BU list
             mock_result.scalars.return_value.all.return_value = [fake_bu]
-        elif call_count % 5 == 2:
+        elif c == 2:  # Senior count (scalar)
+            mock_result.scalar.return_value = 10
+        elif c == 3:  # AnnualBudget list
             mock_result.scalars.return_value.all.return_value = [fake_budget]
-        else:
+        else:         # Expenditure scalars + other BU type BU lists
             mock_result.scalar.return_value = 0
+            mock_result.scalars.return_value.all.return_value = []
         return mock_result
 
     mock_db = AsyncMock()
@@ -305,7 +307,8 @@ async def test_sc20_dashboard_summary_achievement_rate():
     async def fake_execute(query):
         mock_result = MagicMock()
         call_count[0] += 1
-        # Each BU type gets 5 calls: 1=BU list, 2=budgets, 3/4/5=expenditures
+        # PUBLIC_BENEFIT BU(1)→empty, SOCIAL_SERVICE BU(2)→empty,
+        # MARKET BU(3)→[fake_bu], senior_count(4), budgets(5), exp×3(6,7,8)
         c = call_count[0]
         if c == 1:  # public_benefit BU list
             mock_result.scalars.return_value.all.return_value = []
@@ -313,7 +316,9 @@ async def test_sc20_dashboard_summary_achievement_rate():
             mock_result.scalars.return_value.all.return_value = []
         elif c == 3:  # market BU list
             mock_result.scalars.return_value.all.return_value = [fake_bu]
-        elif c == 4:  # market budgets
+        elif c == 4:  # market senior count
+            mock_result.scalar.return_value = 5
+        elif c == 5:  # market budgets
             mock_result.scalars.return_value.all.return_value = [fake_budget]
         else:
             mock_result.scalar.return_value = 5_000_000  # 50% spent
