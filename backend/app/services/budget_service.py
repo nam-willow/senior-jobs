@@ -23,6 +23,7 @@ async def create_budget(
         manager_wage_budget=data.manager_wage_budget,
         operation_budget=data.operation_budget,
         senior_count=data.senior_count,
+        hourly_wage=data.hourly_wage,
         created_by=uuid.UUID(user_id),
     )
     db.add(budget)

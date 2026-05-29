@@ -15,6 +15,7 @@ class AnnualBudgetCreate(BaseModel):
     manager_wage_budget: int
     operation_budget: int
     senior_count: int
+    hourly_wage: int = 0
 
 
 class AnnualBudgetUpdate(BaseModel):
@@ -22,6 +23,7 @@ class AnnualBudgetUpdate(BaseModel):
     manager_wage_budget: Optional[int] = None
     operation_budget: Optional[int] = None
     senior_count: Optional[int] = None
+    hourly_wage: Optional[int] = None
 
 
 class AnnualBudgetResponse(BaseModel):
@@ -33,6 +35,7 @@ class AnnualBudgetResponse(BaseModel):
     manager_wage_budget: int
     operation_budget: int
     senior_count: int
+    hourly_wage: int
     created_by: uuid.UUID
     created_at: datetime
 

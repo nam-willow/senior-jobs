@@ -45,21 +45,38 @@ export function Budget({ tab, setTab }: BudgetProps) {
   const [budgetMgr, setBudgetMgr] = useState('');
   const [budgetOp, setBudgetOp] = useState('');
   const [budgetSeniorCount, setBudgetSeniorCount] = useState('');
+  const [budgetHourlyWage, setBudgetHourlyWage] = useState('');
   const [budgetSubmitting, setBudgetSubmitting] = useState(false);
 
+  // ── 예산 등록 폼 파생값 ──────────────────────────────────────────────
+  const wageNum = parseInt(budgetWage || '0', 10);
+  const mgrNum = parseInt(budgetMgr || '0', 10);
+  const opNum = parseInt(budgetOp || '0', 10);
+  const seniorCountNum = parseInt(budgetSeniorCount || '0', 10);
+  const hourlyNum = parseInt(budgetHourlyWage || '0', 10);
+  // 총사업비 = 세 항목 합 (자동 계산)
+  const totalBudgetForm = wageNum + mgrNum + opNum;
+  // 검증 기준: 시급 × 연간 배정시간 × 인원 == 어르신 임금 예산
+  const annualHours = bu?.total_annual_hours ?? 0;
+  const expectedWage = hourlyNum * annualHours * seniorCountNum;
+  // 시급·인원·연간시간이 모두 입력됐을 때만 검증. 불일치 시 경고 → 저장 차단
+  const canValidateWage = hourlyNum > 0 && seniorCountNum > 0 && annualHours > 0;
+  const wageMismatch = canValidateWage && expectedWage !== wageNum;
+
   const handleCreateBudget = async () => {
-    if (!bu) return;
+    if (!bu || wageMismatch) return;
     setBudgetSubmitting(true);
     try {
       await api.post('/budgets/', {
         business_unit_id: bu.id,
         year,
-        total_wage_budget: parseInt(budgetWage || '0', 10),
-        manager_wage_budget: parseInt(budgetMgr || '0', 10),
-        operation_budget: parseInt(budgetOp || '0', 10),
-        senior_count: parseInt(budgetSeniorCount || '0', 10),
+        total_wage_budget: wageNum,
+        manager_wage_budget: mgrNum,
+        operation_budget: opNum,
+        senior_count: seniorCountNum,
+        hourly_wage: hourlyNum,
       });
-      setBudgetWage(''); setBudgetMgr(''); setBudgetOp(''); setBudgetSeniorCount('');
+      setBudgetWage(''); setBudgetMgr(''); setBudgetOp(''); setBudgetSeniorCount(''); setBudgetHourlyWage('');
       setShowBudgetModal(false);
       refetch();
     } catch {
@@ -294,12 +311,13 @@ export function Budget({ tab, setTab }: BudgetProps) {
             <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 24 }}>
               연간 예산을 설정합니다.
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
               {[
+                { label: '시급 (원)', value: budgetHourlyWage, set: setBudgetHourlyWage },
+                { label: '참여 예정 어르신 수 (명)', value: budgetSeniorCount, set: setBudgetSeniorCount },
                 { label: '어르신 임금 예산 (원)', value: budgetWage, set: setBudgetWage },
                 { label: '담당자 임금 예산 (원)', value: budgetMgr,  set: setBudgetMgr  },
                 { label: '사업진행비 예산 (원)',   value: budgetOp,   set: setBudgetOp   },
-                { label: '참여 예정 어르신 수 (명)', value: budgetSeniorCount, set: setBudgetSeniorCount },
               ].map((f) => (
                 <div key={f.label}>
                   <div style={labelStyle}>{f.label}</div>
@@ -307,9 +325,36 @@ export function Budget({ tab, setTab }: BudgetProps) {
                 </div>
               ))}
             </div>
+
+            {/* 총사업비 자동계산 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--cream-50)', borderRadius: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-700)' }}>총 사업비 (자동 계산)</span>
+              <span className="num" style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink-900)' }}>{fmt(totalBudgetForm)}원</span>
+            </div>
+
+            {/* 어르신 임금 예산 검증 */}
+            {canValidateWage && (
+              <div style={{
+                padding: '12px 16px', borderRadius: 10, marginBottom: 16, fontSize: 13, lineHeight: 1.5,
+                background: wageMismatch ? '#FBE3E3' : 'var(--green-50)',
+                border: `1px solid ${wageMismatch ? '#EBBCBC' : 'var(--green-200)'}`,
+                color: wageMismatch ? 'var(--danger)' : 'var(--green-700)',
+              }}>
+                {wageMismatch ? (
+                  <>
+                    ⚠️ <strong>어르신 임금 예산 불일치</strong><br/>
+                    시급 {fmt(hourlyNum)}원 × {annualHours}시간 × {seniorCountNum}명 = <strong>{fmt(expectedWage)}원</strong>이어야 합니다.
+                    (입력: {fmt(wageNum)}원) — 금액을 맞춰야 저장할 수 있습니다.
+                  </>
+                ) : (
+                  <>✓ 어르신 임금 예산이 시급·인원·연간시간 계산과 일치합니다.</>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <Button variant="secondary" size="md" onClick={() => setShowBudgetModal(false)}>취소</Button>
-              <Button variant="primary" size="md" icon={<Icons.plus/>} onClick={handleCreateBudget} disabled={budgetSubmitting}>
+              <Button variant="primary" size="md" icon={<Icons.plus/>} onClick={handleCreateBudget} disabled={budgetSubmitting || wageMismatch}>
                 {budgetSubmitting ? '등록 중…' : '등록'}
               </Button>
             </div>

@@ -28,6 +28,30 @@ async def register_tenant(
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    [기관 최초 등록] 기관(테넌트) + 사업단 + 관리자 계정을 한 번에 생성.
+    선택한 사업 유형(공익활동형·사회서비스형·시장형)별 사업단이 자동 생성됨.
+    인증 불필요 (온보딩 화면에서 호출).
+
+    Args:
+        data.tenant_name     (str)              : 기관명. 중복 불가. 예) "서울노인일자리센터"
+        data.tenant_address  (str)              : 기관 주소.
+        data.business_types  (List[str])        : 사업 유형 목록. 최소 1개 필수.
+                                                  "public_benefit" | "social_service" | "market"
+        data.admin_name      (str)              : 관리자 이름.
+        data.admin_email     (str)              : 관리자 이메일. 중복 불가.
+        data.admin_password  (str)              : 관리자 비밀번호. 8자 이상 필수.
+
+    Returns:
+        tenant_id   (str) : 생성된 기관 UUID.
+        tenant_name (str) : 기관명.
+        admin_email (str) : 관리자 이메일.
+        message     (str) : 안내 메시지 (사업비 등록 유도).
+
+    Raises:
+        409 : admin_email 또는 tenant_name 중복
+        422 : business_types 빈 배열, 비밀번호 8자 미만, 필수 항목 공백
+    """
     # 이메일 중복 확인
     existing = await db.execute(select(User).where(User.email == data.admin_email))
     if existing.scalar_one_or_none():

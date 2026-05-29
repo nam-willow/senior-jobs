@@ -33,8 +33,29 @@ async def get_print_list(
     business_unit_id: Optional[str] = None,
 ):
     """
-    이번달 어르신 전체 목록 + 행 수 케이스별 집계.
-    응답: { seniors: [...], case_summary: {"10행": 45, "12행": 23}, total_pages: int }
+    [근무일지 출력 목록] 해당 월 어르신 전체 목록 + 케이스별 행 수 집계 반환.
+    근무일지 출력 페이지 진입 시 호출. 인쇄 매수 사전 확인 용도.
+
+    Args:
+        year             (int, path)      : 조회 연도.
+        month            (int, path)      : 조회 월 (1~11).
+        business_unit_id (str, optional)  : 사업단 UUID 필터. 생략 시 전체 사업단.
+
+    Returns:
+        year         (int)    : 조회 연도.
+        month        (int)    : 조회 월.
+        seniors      (List)   : 어르신 목록.
+            - senior_id          (str) : 어르신 UUID.
+            - name               (str) : 이름.
+            - workplace          (str) : 근무장소.
+            - row_count          (int) : 해당 월 권장 근무 행 수.
+            - business_unit_name (str) : 소속 사업단명.
+        case_summary (dict)   : 행 수별 어르신 수. 예) {"10행": 45, "12행": 23}
+        total_pages  (int)    : 총 어르신 수 (인쇄 매수).
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
     """
     q = (
         select(Senior, BusinessUnit)
@@ -98,7 +119,23 @@ async def export_work_log_excel(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     business_unit_id: Optional[str] = None,
 ):
-    """근무일지 전체 어르신 Excel 단건 동기 다운로드. 어르신 1인 = 1시트."""
+    """
+    [근무일지 Excel 다운로드] 해당 월 전체 어르신 근무일지를 Excel 파일로 즉시 다운로드.
+    어르신 1인 = 1시트. 동기 처리. 대용량 시 bulk 엔드포인트 사용 권장.
+
+    Args:
+        year             (int, path)     : 다운로드 연도.
+        month            (int, path)     : 다운로드 월 (1~11).
+        business_unit_id (str, optional) : 사업단 UUID 필터. 생략 시 전체 사업단.
+
+    Returns:
+        파일 스트림 (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+        Content-Disposition: attachment; filename=work_log_{year}_{month:02d}.xlsx
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+    """
     q = (
         select(Senior, BusinessUnit)
         .join(BusinessUnit, Senior.business_unit_id == BusinessUnit.id)
@@ -155,7 +192,24 @@ async def export_work_log_bulk(
     db: Annotated[AsyncSession, Depends(get_tenant_db)] = None,
     business_unit_id: Optional[str] = None,
 ):
-    """근무일지 다건 비동기 내보내기. Celery task_id 반환."""
+    """
+    [근무일지 대량 비동기 내보내기] Celery 태스크로 근무일지 대량 생성.
+    즉시 task_id 반환 후 GET /tasks/{task_id}/status 로 완료 여부 폴링.
+    어르신 수가 많거나 처리 시간이 긴 경우 이 엔드포인트 사용.
+
+    Args:
+        year             (int, query) : 내보내기 연도. 필수.
+        month            (int, query) : 내보내기 월. 필수.
+        business_unit_id (str, query) : 사업단 UUID 필터. 생략 시 전체.
+
+    Returns:
+        task_id (str) : Celery 태스크 ID. 상태 조회에 사용.
+        status  (str) : 항상 "PENDING".
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+    """
     task = export_work_logs_bulk.delay(
         year=year,
         month=month,
@@ -176,9 +230,27 @@ async def get_salary_statement(
     format: str = Query(default="excel", regex="^(excel|pdf)$"),
 ):
     """
-    급여대장 출력 (APPROVED 상태 기준).
-    format=excel → .xlsx 즉시 다운로드
-    format=pdf   → .pdf 즉시 다운로드 + document_snapshots 자동 저장
+    [급여대장 다운로드] APPROVED 상태 근무기록 기준으로 급여대장 파일 생성 후 즉시 다운로드.
+    PDF 선택 시 document_snapshots + generated_files 자동 저장. MinIO 업로드 실패해도 파일은 반환.
+    APPROVED 기록이 없으면 404 반환.
+
+    Args:
+        year             (int, path)     : 급여대장 연도.
+        month            (int, path)     : 급여대장 월.
+        business_unit_id (str, optional) : 사업단 UUID 필터. 생략 시 전체 사업단.
+        format           (str, query)    : 파일 형식. "excel" | "pdf". 기본값 "excel"
+
+    Returns:
+        format=excel → 파일 스트림 (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+                        filename: salary_{year}_{month:02d}.xlsx
+        format=pdf   → 파일 스트림 (application/pdf)
+                        filename: salary_{year}_{month:02d}.pdf
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+        404 : 해당 월·사업단에 APPROVED 상태 근무기록 없음
+        422 : format이 "excel" 또는 "pdf"가 아닌 경우
     """
     q = (
         select(Senior, MonthlyWorkRecord, BusinessUnit)

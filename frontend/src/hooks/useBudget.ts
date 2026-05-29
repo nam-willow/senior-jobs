@@ -9,6 +9,7 @@ export interface AnnualBudget {
   manager_wage_budget: number;
   operation_budget: number;
   senior_count: number;
+  hourly_wage: number;
 }
 
 export interface Expenditure {
@@ -32,8 +33,13 @@ export function useBudget(buType: string | null, year: number) {
     api.get<AnnualBudget>(`/budgets/by-type/${buType}/${year}`)
       .then(async (r) => {
         setBudget(r.data);
-        const exps = await api.get<{ items: Expenditure[] }>(`/budgets/expenditures/${r.data.id}`);
-        setExpenditures(exps.data.items);
+        // 지출 조회 실패가 예산 표시까지 무효화하지 않도록 분리한다.
+        try {
+          const exps = await api.get<{ items: Expenditure[] }>(`/budgets/expenditures/${r.data.id}`);
+          setExpenditures(exps.data.items ?? []);
+        } catch {
+          setExpenditures([]);
+        }
       })
       .catch(() => { setBudget(null); setExpenditures([]); })
       .finally(() => setLoading(false));

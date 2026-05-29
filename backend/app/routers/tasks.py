@@ -14,7 +14,28 @@ async def get_task_status(
     task_id: str,
     current_user: Annotated[CurrentUser, Depends(require_permission("VIEW_SENIOR"))],
 ):
-    """Celery 태스크 진행 상태 조회."""
+    """
+    [태스크 상태 조회] Celery 비동기 태스크의 현재 진행 상태 조회.
+    bulk export 요청 후 task_id로 완료 여부를 폴링할 때 사용.
+
+    Args:
+        task_id (str, path) : 조회할 Celery 태스크 ID.
+                              bulk export 엔드포인트가 반환한 task_id를 사용.
+
+    Returns:
+        task_id (str)      : 조회한 태스크 ID.
+        status  (str)      : 태스크 상태.
+                             "PENDING"  — 대기 중 (아직 시작 전).
+                             "STARTED"  — 처리 중.
+                             "SUCCESS"  — 완료.
+                             "FAILURE"  — 실패.
+        result  (obj|null) : SUCCESS 시 태스크 결과 데이터. 그 외 null.
+                             FAILURE 시 {"error": "에러 메시지"}.
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+    """
     result = AsyncResult(task_id, app=celery_app)
 
     if result.state == "PENDING":

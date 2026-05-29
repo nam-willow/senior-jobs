@@ -4,7 +4,6 @@ import { useAppStore } from '../stores/appStore';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useSeniors } from '../hooks/useSeniors';
 import { useWorkRecords } from '../hooks/useWorkRecords';
-import { api } from '../lib/api';
 import { fmt } from '../data/mockData';
 import { UnitTabBar } from '../components/layout/UnitTabBar';
 import { BudgetStrip } from '../components/layout/BudgetStrip';

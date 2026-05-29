@@ -35,6 +35,29 @@ async def list_consultation_logs(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     senior_id: Optional[str] = None,
 ):
+    """
+    [상담일지 목록] 어르신별 상담일지 목록 조회.
+    어르신 상세 모달 및 상담일지 페이지에서 공통 사용.
+
+    Args:
+        senior_id (str, optional) : 특정 어르신 UUID. 전달 시 해당 어르신 일지만 조회.
+                                    생략 시 기관 전체 상담일지 반환.
+
+    Returns:
+        items (List[ConsultationLogResponse]) : 상담일지 목록.
+            - senior_id           (str)      : 어르신 UUID.
+            - social_worker_id    (str)      : 담당 사회복지사 UUID.
+            - consultation_date   (str)      : 상담일시. 형식: "YYYY-MM-DDTHH:MM:SS"
+            - method              (str)      : 상담 방법. "visit" | "phone" | "in_person" | "other"
+            - content             (str)      : 상담 내용.
+            - memo                (str|null) : 메모.
+            - default_session_hours(int)     : 기본 회기 시간.
+        total (int) : 전체 건수.
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+    """
     items = await consultation_log_service.list_consultation_logs(
         db, current_user.tenant_id, senior_id
     )
@@ -48,6 +71,27 @@ async def create_consultation_log(
     current_user: Annotated[CurrentUser, Depends(require_permission("EDIT_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ):
+    """
+    [상담일지 등록] 새 상담일지 작성. social_worker_id는 토큰에서 자동 설정.
+    감사 로그(IP 포함) 기록.
+
+    Args:
+        data.senior_id            (str)          : 상담 대상 어르신 UUID. 필수.
+        data.consultation_date    (str)          : 상담일시. 필수. 형식: "YYYY-MM-DDTHH:MM:SS"
+        data.method               (str)          : 상담 방법. 필수.
+                                                   "visit" | "phone" | "in_person" | "other"
+        data.content              (str)          : 상담 내용. 필수.
+        data.memo                 (str, optional): 메모.
+        data.default_session_hours(int)          : 기본 회기 시간. 필수.
+
+    Returns:
+        ConsultationLogResponse : 등록된 상담일지.
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : EDIT_SENIOR 권한 없음
+        422 : 필수 항목 누락 또는 형식 오류
+    """
     log = await consultation_log_service.create_consultation_log(
         db, current_user.tenant_id, current_user.user_id, data,
         ip_address=request.client.host if request.client else "unknown",
@@ -65,6 +109,26 @@ async def update_consultation_log(
     current_user: Annotated[CurrentUser, Depends(require_permission("EDIT_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ):
+    """
+    [상담일지 수정] 기존 상담일지 부분 수정. 감사 로그(IP 포함) 기록.
+    전달하지 않은 필드는 기존 값 유지.
+
+    Args:
+        log_id                 (str, path)    : 수정할 상담일지 UUID.
+        data.consultation_date (str, optional): 변경할 상담일시. 형식: "YYYY-MM-DDTHH:MM:SS"
+        data.method            (str, optional): 변경할 상담 방법.
+                                                "visit" | "phone" | "in_person" | "other"
+        data.content           (str, optional): 변경할 상담 내용.
+        data.memo              (str, optional): 변경할 메모.
+
+    Returns:
+        ConsultationLogResponse : 수정된 상담일지.
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : EDIT_SENIOR 권한 없음
+        404 : 상담일지 없음
+    """
     log = await consultation_log_service.update_consultation_log(
         db, str(log_id), current_user.tenant_id, current_user.user_id, data,
         ip_address=request.client.host if request.client else "unknown",
@@ -81,6 +145,20 @@ async def delete_consultation_log(
     current_user: Annotated[CurrentUser, Depends(require_permission("EDIT_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ):
+    """
+    [상담일지 삭제] 상담일지 소프트 삭제. 감사 로그(IP 포함) 기록.
+
+    Args:
+        log_id (str, path) : 삭제할 상담일지 UUID.
+
+    Returns:
+        없음 (HTTP 204 No Content)
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : EDIT_SENIOR 권한 없음
+        404 : 상담일지 없음
+    """
     await consultation_log_service.delete_consultation_log(
         db, str(log_id), current_user.tenant_id, current_user.user_id,
         ip_address=request.client.host if request.client else "unknown",
@@ -148,7 +226,22 @@ async def export_consultation_log_excel(
     current_user: Annotated[CurrentUser, Depends(require_permission("VIEW_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ):
-    """상담일지 단건 Excel 동기 다운로드 + document_snapshots 저장."""
+    """
+    [상담일지 Excel 내보내기] 상담일지 단건을 Excel 파일로 즉시 다운로드.
+    document_snapshots + generated_files에 이력 자동 저장. MinIO 업로드 실패해도 파일은 반환.
+
+    Args:
+        log_id (str, path) : 내보낼 상담일지 UUID.
+
+    Returns:
+        파일 스트림 (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+        Content-Disposition: attachment; filename=consultation_{log_id}.xlsx
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+        404 : 상담일지 없음
+    """
     log, senior, worker = await _fetch_log_with_context(db, log_id, current_user.tenant_id)
 
     log_data = [{
@@ -186,7 +279,22 @@ async def export_consultation_log_pdf(
     current_user: Annotated[CurrentUser, Depends(require_permission("VIEW_SENIOR"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ):
-    """상담일지 단건 PDF 동기 다운로드 + document_snapshots 저장."""
+    """
+    [상담일지 PDF 내보내기] 상담일지 단건을 PDF 파일로 즉시 다운로드.
+    document_snapshots + generated_files에 이력 자동 저장. MinIO 업로드 실패해도 파일은 반환.
+
+    Args:
+        log_id (str, path) : 내보낼 상담일지 UUID.
+
+    Returns:
+        파일 스트림 (application/pdf)
+        Content-Disposition: attachment; filename=consultation_{log_id}.pdf
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+        404 : 상담일지 없음
+    """
     log, senior, worker = await _fetch_log_with_context(db, log_id, current_user.tenant_id)
 
     log_data = [{
@@ -225,7 +333,23 @@ async def export_consultation_logs_bulk(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     format: str = Query(default="excel", regex="^(excel|pdf)$"),
 ):
-    """상담일지 다건 비동기 내보내기. Celery task_id 반환."""
+    """
+    [상담일지 대량 내보내기] 여러 상담일지를 비동기(Celery)로 내보내기 처리.
+    즉시 task_id 반환 후 GET /tasks/{task_id}/status 로 완료 여부 폴링.
+
+    Args:
+        log_ids      (List[str], body) : 내보낼 상담일지 UUID 목록. 예) ["uuid1", "uuid2"]
+        format       (str, query)      : 내보내기 형식. "excel" | "pdf". 기본값 "excel"
+
+    Returns:
+        task_id (str) : Celery 태스크 ID. 상태 조회에 사용.
+        status  (str) : 항상 "PENDING".
+
+    Raises:
+        401 : 토큰 없음 또는 만료
+        403 : VIEW_SENIOR 권한 없음
+        422 : format이 "excel" 또는 "pdf"가 아닌 경우
+    """
     task = _bulk_task.delay(
         log_ids=log_ids,
         tenant_id=current_user.tenant_id,
