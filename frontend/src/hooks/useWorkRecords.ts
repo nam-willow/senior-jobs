@@ -7,11 +7,17 @@ export interface WorkRecord {
   year: number;
   month: number;
   worked_hours: number;
-  session_count: number;
+  worked_days: number;
   amount_paid: number;
   status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-  reason_for_overtime: string | null;
-  business_unit_id: string;
+  overtime_reason: string | null;
+}
+
+export interface SavePayload {
+  hours: number;
+  amount: number;
+  workedDays: number;
+  reason?: string;
 }
 
 export function useWorkRecords(year: number, month: number, businessUnitId: string | null) {
@@ -31,22 +37,25 @@ export function useWorkRecords(year: number, month: number, businessUnitId: stri
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const save = async (seniorId: string, hours: number, reason?: string) => {
+  const save = async (seniorId: string, payload: SavePayload) => {
+    const { hours, amount, workedDays, reason } = payload;
     const existing = records.find((r) => r.senior_id === seniorId && r.status === 'DRAFT');
     if (existing) {
       await api.put(`/work-records/${existing.id}`, {
         worked_hours: hours,
-        reason_for_overtime: reason ?? null,
+        worked_days: workedDays,
+        amount_paid: amount,
+        overtime_reason: reason ?? null,
       });
     } else {
       await api.post('/work-records/', {
         senior_id: seniorId,
-        business_unit_id: businessUnitId,
         year,
         month,
         worked_hours: hours,
-        session_count: Math.ceil(hours / 3),
-        reason_for_overtime: reason ?? null,
+        worked_days: workedDays,
+        amount_paid: amount,
+        overtime_reason: reason ?? null,
       });
     }
     fetch();

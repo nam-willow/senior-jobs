@@ -28,13 +28,14 @@ export function Budget({ tab, setTab }: BudgetProps) {
   const year = useAppStore((s) => s.year);
   const { units, byTab } = useBusinessUnits(year);
   const bu = byTab(tab);
-  const { budget, expenditures, loading, totalBudget, totalSpent, remaining, pct, refetch } = useBudget(bu?.type ?? null, year);
+  const { budget, expenseRows, loading, totalBudget, totalSpent, remaining, pct, refetch } = useBudget(bu?.type ?? null, year);
   const color = TAB_TONE[tab].color;
   const [section, setSection] = useState<'expense' | 'income'>('expense');
 
   const [formDate, setFormDate] = useState('');
   const [formItem, setFormItem] = useState('');
-  const [formCategory, setFormCategory] = useState<'wage' | 'manager_wage' | 'operation'>('wage');
+  // 어르신 임금(wage)은 근무등록에서 자동 집계되므로 수동 등록 대상에서 제외
+  const [formCategory, setFormCategory] = useState<'manager_wage' | 'operation'>('manager_wage');
   const [formAmount, setFormAmount] = useState('');
   const [formNote, setFormNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -142,7 +143,7 @@ export function Budget({ tab, setTab }: BudgetProps) {
       <div className="g4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 22 }}>
         {[
           { lb: '총 사업비 (예산)', val: won(totalBudget), sub: '연간 예산', color: 'var(--ink-900)' },
-          { lb: '지출 누계',        val: won(totalSpent),  sub: `${expenditures.length}건 등록`, color },
+          { lb: '지출 누계',        val: won(totalSpent),  sub: `${expenseRows.length}건 등록`, color },
           { lb: '잔액',             val: won(remaining),   sub: `${100 - pct}% 남음`, color: remaining < 0 ? 'var(--danger)' : 'var(--green-700)' },
           { lb: '집행률',           val: `${pct}%`,        sub: '대비 지출', color: pct > 90 ? 'var(--danger)' : 'var(--ink-900)' },
         ].map((s) => (
@@ -209,10 +210,12 @@ export function Budget({ tab, setTab }: BudgetProps) {
                   <div>
                     <div style={labelStyle}>항목 구분</div>
                     <select value={formCategory} onChange={(e) => setFormCategory(e.target.value as typeof formCategory)} style={inputStyle}>
-                      <option value="wage">어르신 임금</option>
                       <option value="manager_wage">담당자 임금</option>
                       <option value="operation">사업진행비</option>
                     </select>
+                    <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 6, lineHeight: 1.4 }}>
+                      ※ 어르신 임금은 [월별 근무 등록]에서 <strong>승인된 근무기록</strong>으로 자동 집계됩니다.
+                    </div>
                   </div>
                   <div>
                     <div style={labelStyle}>금액 (원)</div>
@@ -252,13 +255,13 @@ export function Budget({ tab, setTab }: BudgetProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {expenditures.length === 0 ? (
+                    {expenseRows.length === 0 ? (
                       <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)' }}>
                         등록된 지출이 없습니다.
                       </td></tr>
-                    ) : expenditures.map((e) => (
+                    ) : expenseRows.map((e) => (
                       <tr key={e.id} style={{ borderTop: '1px solid var(--line-soft)' }}>
-                        <td className="num" style={{ padding: '13px 18px', color: 'var(--ink-700)' }}>{e.expense_date.slice(0, 10).replace(/-/g, '.')}</td>
+                        <td className="num" style={{ padding: '13px 18px', color: 'var(--ink-700)' }}>{e.display_date}</td>
                         <td style={{ padding: '13px 18px' }}>
                           <Chip tone={(CAT_TONE[e.category] ?? 'neutral') as 'green' | 'warm' | 'danger'} size="sm">{CAT_LABEL[e.category] ?? e.category}</Chip>
                         </td>
@@ -266,17 +269,21 @@ export function Budget({ tab, setTab }: BudgetProps) {
                         <td className="num" style={{ padding: '13px 18px', textAlign: 'right', fontWeight: 700 }}>{fmt(e.amount)}원</td>
                         <td style={{ padding: '13px 18px', fontSize: 13, color: 'var(--ink-500)' }}>{e.note ?? '—'}</td>
                         <td style={{ padding: '13px 18px' }}>
-                          <Button variant="ghost" size="sm" onClick={async () => {
-                            if (!confirm('이 지출을 삭제하시겠습니까?')) return;
-                            await api.delete(`/budgets/expenditures/${e.id}`);
-                            refetch();
-                          }}>삭제</Button>
+                          {e.deletable ? (
+                            <Button variant="ghost" size="sm" onClick={async () => {
+                              if (!confirm('이 지출을 삭제하시겠습니까?')) return;
+                              await api.delete(`/budgets/expenditures/${e.id}`);
+                              refetch();
+                            }}>삭제</Button>
+                          ) : (
+                            <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>근무등록</span>
+                          )}
                         </td>
                       </tr>
                     ))}
-                    {expenditures.length > 0 && (
+                    {expenseRows.length > 0 && (
                       <tr style={{ background: 'var(--cream-50)', borderTop: '2px solid var(--line)' }}>
-                        <td colSpan={3} style={{ padding: '14px 18px', fontWeight: 800 }}>합계 ({expenditures.length}건)</td>
+                        <td colSpan={3} style={{ padding: '14px 18px', fontWeight: 800 }}>합계 ({expenseRows.length}건)</td>
                         <td className="num" style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 800, color }}>{fmt(totalSpent)}원</td>
                         <td colSpan={2}/>
                       </tr>

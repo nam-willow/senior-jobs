@@ -48,7 +48,7 @@ export function Work({ tab, setTab, focusSenior, setFocusSenior }: WorkProps) {
         hours: rec ? String(rec.worked_hours) : '',
         amount: rec ? rec.amount_paid : 0,
         dirty: false,
-        reason: rec?.reason_for_overtime ?? '',
+        reason: rec?.overtime_reason ?? '',
       };
     });
     setRows(next);
@@ -81,9 +81,12 @@ export function Work({ tab, setTab, focusSenior, setFocusSenior }: WorkProps) {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
+      const sessionHours = bu?.session_default_hours || 3;
       for (const [id, r] of dirtyRows) {
-        if (parseFloat(r.hours) > 43) continue;
-        await save(id, parseFloat(r.hours) || 0, r.reason || undefined);
+        const hours = parseFloat(r.hours) || 0;
+        if (hours > 43) continue;
+        const workedDays = hours > 0 ? Math.ceil(hours / sessionHours) : 0;
+        await save(id, { hours, amount: r.amount, workedDays, reason: r.reason || undefined });
       }
       setRows((p) => {
         const next = { ...p };

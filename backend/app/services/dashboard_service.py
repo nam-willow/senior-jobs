@@ -70,9 +70,23 @@ async def get_summary(db: AsyncSession, tenant_id: str, year: int) -> dict:
             op_budget = sum(b.operation_budget for b in budgets)
             total_budget = wage_budget + mgr_budget + op_budget
 
+            # 어르신 임금 집행액: 승인(APPROVED)된 근무기록 지급액 합계로 자동 집계
+            wage_result = await db.execute(
+                select(func.coalesce(func.sum(MonthlyWorkRecord.amount_paid), 0))
+                .join(Senior, MonthlyWorkRecord.senior_id == Senior.id)
+                .where(
+                    MonthlyWorkRecord.tenant_id == uuid.UUID(tenant_id),
+                    MonthlyWorkRecord.year == year,
+                    MonthlyWorkRecord.status == WorkRecordStatus.APPROVED,
+                    Senior.business_unit_id.in_(bu_ids),
+                )
+            )
+            wage_spent = int(wage_result.scalar() or 0)
+
             budget_ids = [b.id for b in budgets]
             if budget_ids:
-                for category, field_name in [("wage", "wage_spent"), ("manager_wage", "mgr_spent"), ("operation", "op_spent")]:
+                # 담당자 임금 / 사업진행비: 수동 등록 지출에서 집계
+                for category in ("manager_wage", "operation"):
                     exp_result = await db.execute(
                         select(func.coalesce(func.sum(BudgetExpenditure.amount), 0)).where(
                             BudgetExpenditure.annual_budget_id.in_(budget_ids),
@@ -81,13 +95,11 @@ async def get_summary(db: AsyncSession, tenant_id: str, year: int) -> dict:
                         )
                     )
                     val = int(exp_result.scalar())
-                    if category == "wage":
-                        wage_spent = val
-                    elif category == "manager_wage":
+                    if category == "manager_wage":
                         mgr_spent = val
                     else:
                         op_spent = val
-                total_expenditure = wage_spent + mgr_spent + op_spent
+            total_expenditure = wage_spent + mgr_spent + op_spent
 
         remaining = total_budget - total_expenditure
         achievement_rate = round(total_expenditure / total_budget * 100, 1) if total_budget > 0 else 0.0
