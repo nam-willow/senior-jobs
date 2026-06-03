@@ -221,3 +221,9 @@ __marimo__/
 CLAUDE.md
 handoff/
 spec/
+
+# 스크립트 실행
+/backend/*.sh
+/backend/*.txt
+/frontend/*.sh
+/frontend/*.txt
